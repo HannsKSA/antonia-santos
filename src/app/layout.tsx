@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Consejo de Padres - I.E. Antonia Santos",
+  title: "IE Antonia Santos - Consejo de Padres",
   description: "Sistema de Gestión Comunitaria para el Consejo de Padres y Representantes de la Institución Educativa Antonia Santos.",
 };
 
@@ -14,29 +14,23 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body>
-        <nav className="glass-card" style={{ 
-          position: 'sticky', 
-          top: '1rem', 
-          margin: '1rem', 
+        <nav className="glass-card" style={{
+          position: 'sticky',
+          top: '1rem',
+          margin: '1rem',
           zIndex: 100,
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '1rem 2rem'
+          padding: '0.75rem 2rem'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ 
-              width: '40px', 
-              height: '40px', 
-              background: 'var(--primary)', 
-              borderRadius: '50%',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              color: 'var(--accent)',
-              fontWeight: 'bold'
-            }}>AS</div>
-            <span style={{ fontWeight: 700, color: 'var(--primary)' }}>Antonia Santos</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <img
+              src="/logo.png"
+              alt="Logo IE Antonia Santos"
+              style={{ width: '50px', height: 'auto', borderRadius: '4px' }}
+            />
+            <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '1.2rem' }}>IE Antonia Santos</span>
           </div>
           <div style={{ display: 'flex', gap: '2rem', fontWeight: 600, color: 'var(--text-muted)' }}>
             <a href="#" style={{ color: 'var(--primary)' }}>Inicio</a>

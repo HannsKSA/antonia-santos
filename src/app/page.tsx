@@ -13,7 +13,7 @@ export default function Home() {
           </h1>
           <p style={{ fontSize: '1.25rem', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto 3rem' }}>
             Un espacio democrático y participativo para padres, docentes y estudiantes de la
-            Institución Educativa Antonia Santos.
+            IE Antonia Santos.
           </p>
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
             <button className="btn-primary" style={{ padding: '1rem 2.5rem', fontSize: '1.1rem' }}>
