@@ -1,65 +1,84 @@
-import Image from "next/image";
-
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <main>
+      {/* Hero Section */}
+      <section style={{
+        padding: '6rem 0',
+        background: 'radial-gradient(circle at top right, #e2e8f0 0%, #f8fafc 100%)',
+        textAlign: 'center'
+      }}>
+        <div className="container animate-fade-in">
+          <h1 style={{ fontSize: '3.5rem', marginBottom: '1.5rem', maxWidth: '800px', margin: '0 auto 1.5rem' }}>
+            Transformando la Comunicación en Nuestra Comunidad
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p style={{ fontSize: '1.25rem', color: 'var(--text-muted)', maxWidth: '600px', margin: '0 auto 3rem' }}>
+            Un espacio democrático y participativo para padres, docentes y estudiantes de la
+            Institución Educativa Antonia Santos.
           </p>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+            <button className="btn-primary" style={{ padding: '1rem 2.5rem', fontSize: '1.1rem' }}>
+              Solicitar Acceso
+            </button>
+            <button className="btn-accent" style={{ padding: '1rem 2.5rem', fontSize: '1.1rem', background: 'transparent', border: '2px solid var(--accent)' }}>
+              Ver Noticias
+            </button>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </section>
+
+      {/* Features Grid */}
+      <section style={{ padding: '5rem 0' }}>
+        <div className="container">
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+            gap: '2.5rem'
+          }}>
+            <div className="glass-card" style={{ padding: '2.5rem' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>📰</div>
+              <h3 style={{ marginBottom: '1rem' }}>Comunicación Transparente</h3>
+              <p style={{ color: 'var(--text-muted)' }}>
+                Mantente al día con las noticias y eventos de tu grado.
+                Confirma tu lectura con un solo clic.
+              </p>
+            </div>
+            <div className="glass-card" style={{ padding: '2.5rem' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>🗳️</div>
+              <h3 style={{ marginBottom: '1rem' }}>Votación Democrática</h3>
+              <p style={{ color: 'var(--text-muted)' }}>
+                Participa en encuestas oficiales y toma de decisiones que afectan
+                el futuro de la institución.
+              </p>
+            </div>
+            <div className="glass-card" style={{ padding: '2.5rem' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>💡</div>
+              <h3 style={{ marginBottom: '1rem' }}>Propuestas Ciudadanas</h3>
+              <p style={{ color: 'var(--text-muted)' }}>
+                Propón ideas, debate con otros padres y ve cómo tus sugerencias
+                se transforman en realidad.
+              </p>
+            </div>
+          </div>
         </div>
-      </main>
-    </div>
+      </section>
+
+      {/* Stats / Proof Section */}
+      <section style={{ padding: '5rem 0', background: 'var(--primary)', color: 'white' }}>
+        <div className="container" style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center' }}>
+          <div>
+            <div style={{ fontSize: '3rem', fontWeight: 700, color: 'var(--accent)' }}>+500</div>
+            <p>Padres Conectados</p>
+          </div>
+          <div>
+            <div style={{ fontSize: '3rem', fontWeight: 700, color: 'var(--accent)' }}>100%</div>
+            <p>Transparencia</p>
+          </div>
+          <div>
+            <div style={{ fontSize: '3rem', fontWeight: 700, color: 'var(--accent)' }}>24/7</div>
+            <p>Participación</p>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }

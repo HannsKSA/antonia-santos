@@ -1,0 +1,108 @@
+# 🚀 Propuesta de Desarrollo: Sistema de Gestión Comunitaria "Consejo de padres y representantes de la institucion educativa Antonia Santos".
+
+Este proyecto busca centralizar la comunicación y participación activa de una comunidad educativa o comunitaria, facilitando la interacción entre administradores y usuarios a través de diferentes niveles de suscripción (grados).
+
+## 🛠️ Stack Tecnológico
+*   **Frontend:** Next.js / Vite (React) con **CSS Vanilla** para máxima flexibilidad estética.
+*   **Backend & DB:** **Supabase** (Autenticación, DB Relacional y Realtime).
+*   **Hosting:** **Vercel**.
+
+---
+
+## 👥 Control de Usuarios y Roles
+
+### **Super Administrador (Root)**
+*   **Capacidades:** Único con permiso para asignar roles de "Administrador" a usuarios existentes.
+*   **Control Total:** Gestión técnica y de permisos de alto nivel.
+
+### **Administradores y Docentes**
+*   **Capacidades:** Publicar Noticias, Eventos, Encuestas y Propuestas.
+*   **Aprobación Orgánica:** Como conocedores de sus grupos, aprueban o rechazan solicitudes de acceso basándose en el nombre del representado proporcionado.
+*   **Seguimiento:** Pueden ver quién se ha "dado por enterado" de los comunicados.
+
+### **Usuarios Estándar**
+*   **Roles:** Representante (Padre), Estudiante o Docente.
+*   **Capacidades:** Interactuar (comentar, votar, confirmar lectura) solo tras ser aprobados.
+*   **Suscripciones:** Soporte para múltiples acudientes por estudiante y múltiples grupos por representante (Feed Unificado).
+
+---
+
+## 📝 Registro y Solicitud de Acceso (Flujo Orgánico)
+
+Para evitar la carga administrativa de subir listas de estudiantes, el sistema funciona mediante validación directa:
+
+1.  **Formulario de Solicitud:**
+    *   **Datos Comunes:** Nombre, Apellido, Celular.
+    *   **Selección de Rol y Grado:**
+        *   **Representante:** Selección de uno o más grupos y mención del nombre del representado.
+        *   **Docente:** Selección del grado al que representa.
+        *   **Estudiante:** Selección del grado que cursa.
+2.  **Estado Pendiente:** El acceso está restringido hasta la validación.
+3.  **Aprobación por Docente:** El profesor recibe la solicitud y, al identificar al representante/niño, habilita el acceso.
+
+---
+
+## 🏗️ Visibilidad y Acceso
+
+### 🌐 Vista Pública (Visitante)
+*   **Contenido:** Solo sección de **Noticias**.
+*   **Restricción:** Solo lectura informativa. No hay interacción.
+
+### 🔐 Vista Privada (Usuario Aprobado)
+*   **Feed Unificado:** El usuario ve en una sola pantalla todas las noticias y eventos de todos los grados en los que participa.
+*   **Notificaciones:** Alertas inmediatas (dentro de la web y opcionalmente vía email) para solicitudes aprobadas, nuevas encuestas y menciones.
+*   **Confirmación de Lectura:** Botón de "Confirmar Lectura" en comunicados.
+
+---
+
+## 🏗️ Módulos Principales
+
+### 📰 Noticias y Comunicados
+*   **Multimedia Híbrido:** Fotos en Supabase Storage o links externos (Drive/YouTube).
+*   **Confirmación de Lectura:** Registro de quiénes se han dado por enterados.
+
+### 🗳️ Encuestas
+*   **Regla de Votación:** Una vez cerrada, el voto queda inhabilitado, salvo reapertura.
+
+### 📅 Eventos
+*   Calendario interactivo segmentado por grupos.
+
+### 💡 Propuestas Participativas (Flujo Refinado)
+1.  **Creación:** Usuario publica idea en su grupo.
+2.  **Moderación y Debate:** El Admin/Docente aprueba la propuesta y puede habilitar una fase de **"Refinamiento"** para que otros usuarios comenten y mejoren la idea antes de la votación.
+3.  **Votación Inicial:** Mide el apoyo social del grupo.
+4.  **Promoción de Idea:** Las más exitosas se elevan a Encuestas Oficiales a nivel general.
+
+---
+
+## 👤 Módulo: Mi Perfil (Dashboard Personal)
+
+### **Vistas para Administradores y Docentes**
+*   **Gestión de Altas:** Panel de aprobación de solicitudes según su grado asignado.
+*   **Moderación de Debates:** Control de los hilos de refinamiento de propuestas.
+*   **Métricas de Alcance:** Ver listado detallado de usuarios que han marcado "Enterado" en sus publicaciones.
+*   **Centro de Notificaciones:** Gestión de comunicaciones críticas.
+
+---
+
+## 🚀 Etapas de Ejecución Detalladas
+
+### Fase 1: Cimientos e Infraestructura 🔐
+*   Configuración de Supabase (Auth, DB y Storage).
+*   Diseño de DB: Tablas de usuarios, grados, **suscripciones (N:M)** y registros de lectura.
+
+### Fase 2: Registro Orgánico y Notificaciones 👥
+*   Formulario de registro multiactor.
+*   Sistema de notificaciones básicas para aprobaciones y alertas críticas.
+
+### Fase 3: Dashboard de Gestión y Moderación 🛠️
+*   Interfaces para Noticias con control de "Enterados".
+*   Módulo de moderación de propuestas con fase de debate/refinamiento.
+
+### Fase 4: Experiencia del Usuario (Feed Unificado) ✨
+*   Home centralizado que mezcla contenidos de múltiples grados según suscripción.
+*   Interacción avanzada (comentarios y votaciones).
+
+### Fase 5: Trazabilidad y Optimización 🎨
+*   Reportes de participación y lectura para docentes.
+*   Diseño Responsivo con micro-interacciones en CSS Vanilla.
