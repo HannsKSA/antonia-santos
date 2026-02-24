@@ -229,3 +229,124 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- ==========================================
+-- 15. SISTEMA DE NOTIFICACIONES IN-APP
+-- ==========================================
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,  -- destinatario
+  actor_id UUID REFERENCES profiles(id) ON DELETE SET NULL, -- quien generó la acción
+  type TEXT NOT NULL CHECK (type IN (
+    'new_post',       -- nueva noticia en mi grupo
+    'new_proposal',   -- nueva propuesta en mi grupo
+    'new_comment',    -- comentario en una propuesta mía
+    'approved',       -- mi cuenta fue aprobada
+    'rejected',       -- mi cuenta fue rechazada
+    'vote_milestone'  -- la propuesta alcanzó 5 votos
+  )),
+  title TEXT NOT NULL,
+  body TEXT,
+  link TEXT,         -- ruta a donde navegar
+  is_read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users see their own notifications" ON notifications;
+DROP POLICY IF EXISTS "System can insert notifications" ON notifications;
+DROP POLICY IF EXISTS "Users can mark notifications as read" ON notifications;
+
+CREATE POLICY "Users see their own notifications" ON notifications
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "System can insert notifications" ON notifications
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Users can mark notifications as read" ON notifications
+  FOR UPDATE USING (auth.uid() = user_id);
+
+-- ==========================================
+-- 16. FUNCIÓN: Notificar a miembros del grupo cuando se publica un post
+-- ==========================================
+CREATE OR REPLACE FUNCTION public.notify_group_on_new_post()
+RETURNS TRIGGER AS $$
+DECLARE
+  member RECORD;
+  post_type TEXT;
+  notif_title TEXT;
+BEGIN
+  -- Solo notificar si el post se publica directamente
+  IF NEW.is_published = TRUE THEN
+    IF NEW.type = 'news' THEN
+      notif_title := '📰 Nueva noticia: ' || NEW.title;
+      post_type := 'new_post';
+    ELSE
+      notif_title := '💡 Nueva propuesta: ' || NEW.title;
+      post_type := 'new_proposal';
+    END IF;
+
+    -- Insertar notificación para cada miembro del grupo destino
+    FOR member IN
+      SELECT ug.user_id FROM user_groups ug WHERE ug.group_id = NEW.group_id
+    LOOP
+      -- No notificar al propio autor
+      IF member.user_id != NEW.author_id THEN
+        INSERT INTO notifications (user_id, actor_id, type, title, body, link)
+        VALUES (
+          member.user_id,
+          NEW.author_id,
+          post_type,
+          notif_title,
+          LEFT(NEW.content, 120),
+          '/dashboard'
+        );
+      END IF;
+    END LOOP;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_post_published ON posts;
+CREATE TRIGGER on_post_published
+  AFTER INSERT ON posts
+  FOR EACH ROW EXECUTE PROCEDURE public.notify_group_on_new_post();
+
+-- ==========================================
+-- 17. FUNCIÓN: Notificar al usuario cuando su cuenta es aprobada/rechazada
+-- ==========================================
+CREATE OR REPLACE FUNCTION public.notify_on_status_change()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF OLD.status != NEW.status THEN
+    IF NEW.status = 'approved' THEN
+      INSERT INTO notifications (user_id, type, title, body, link)
+      VALUES (
+        NEW.id,
+        'approved',
+        '✅ ¡Tu cuenta fue aprobada!',
+        'Ya puedes ver las noticias y propuestas de tus grupos.',
+        '/dashboard'
+      );
+    ELSIF NEW.status = 'rejected' THEN
+      INSERT INTO notifications (user_id, type, title, body, link)
+      VALUES (
+        NEW.id,
+        'rejected',
+        '❌ Tu solicitud no fue aprobada',
+        'Contacta a tu docente para más información.',
+        '/'
+      );
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_profile_status_changed ON profiles;
+CREATE TRIGGER on_profile_status_changed
+  AFTER UPDATE OF status ON profiles
+  FOR EACH ROW EXECUTE PROCEDURE public.notify_on_status_change();

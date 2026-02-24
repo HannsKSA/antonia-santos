@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { usePathname } from 'next/navigation';
+import NotificationBell from '@/components/NotificationBell';
 
 export default function Navbar() {
     const [user, setUser] = useState<any>(null);
@@ -26,7 +27,6 @@ export default function Navbar() {
         return () => subscription.unsubscribe();
     }, []);
 
-    // No mostrar el botón de ingresar si ya estamos en login o registro
     const isAuthPage = pathname === '/login' || pathname === '/register';
 
     return (
@@ -49,16 +49,19 @@ export default function Navbar() {
                 <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '1.2rem' }}>IE Antonia Santos</span>
             </Link>
 
-            <div style={{ display: 'flex', gap: '2rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+            <div className="nav-links" style={{ display: 'flex', gap: '2rem', fontWeight: 600, color: 'var(--text-muted)' }}>
                 <Link href="/" style={{ color: pathname === '/' ? 'var(--primary)' : 'inherit' }}>Inicio</Link>
                 <Link href="/dashboard" style={{ color: pathname === '/dashboard' ? 'var(--primary)' : 'inherit' }}>Noticias</Link>
                 <Link href="/dashboard" style={{ color: pathname === '/dashboard' ? 'var(--primary)' : 'inherit' }}>Propuestas</Link>
             </div>
 
-            <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                {!loading && user && (
+                    <NotificationBell userId={user.id} />
+                )}
                 {!loading && (
                     user ? (
-                        <Link href="/dashboard" className="btn-primary">Mi Panel</Link>
+                        <Link href="/dashboard" className="btn-primary" style={{ padding: '0.55rem 1.2rem' }}>Mi Panel</Link>
                     ) : (
                         !isAuthPage && <Link href="/login" className="btn-primary">Ingresar</Link>
                     )
