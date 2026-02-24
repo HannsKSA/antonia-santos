@@ -7,6 +7,8 @@ export const metadata: Metadata = {
   description: "Sistema de Gestión Comunitaria para el Consejo de Padres y Representantes de la Institución Educativa Antonia Santos.",
 };
 
+import Navbar from "@/components/Navbar";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -15,33 +17,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body>
-        <nav className="glass-card" style={{
-          position: 'sticky',
-          top: '1rem',
-          margin: '1rem',
-          zIndex: 100,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '0.75rem 2rem'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <img
-              src="/logo.png"
-              alt="Logo IE Antonia Santos"
-              style={{ width: '50px', height: 'auto', borderRadius: '4px' }}
-            />
-            <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '1.2rem' }}>IE Antonia Santos</span>
-          </div>
-          <div style={{ display: 'flex', gap: '2rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-            <Link href="/" style={{ color: 'var(--primary)' }}>Inicio</Link>
-            <Link href="/login">Noticias</Link>
-            <Link href="/login">Propuestas</Link>
-          </div>
-          <div>
-            <Link href="/login" className="btn-primary">Ingresar</Link>
-          </div>
-        </nav>
+        <Navbar />
         {children}
         <footer style={{ background: 'var(--primary)', color: 'white', padding: '4rem 0', marginTop: '4rem' }}>
           <div className="container" style={{ textAlign: 'center' }}>

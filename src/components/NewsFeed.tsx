@@ -29,8 +29,8 @@ export default function NewsFeed({ userProfile }: { userProfile: any }) {
                 .eq('is_published', true)
                 .order('created_at', { ascending: false });
 
-            // Si no es admin/super_admin, filtrar por sus grupos + Grupo 'General'
-            if (userProfile.role !== 'super_admin' && userProfile.role !== 'admin') {
+            // Si no es admin/super_admin/teacher, filtrar por sus grupos + Grupo 'General'
+            if (!['super_admin', 'admin', 'teacher'].includes(userProfile.role)) {
                 const { data: generalGroup } = await supabase
                     .from('groups')
                     .select('id')

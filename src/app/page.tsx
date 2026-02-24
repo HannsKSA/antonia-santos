@@ -45,7 +45,7 @@ export default function Home() {
             <Link href="/register" className="btn-primary" style={{ padding: '1rem 2.5rem', fontSize: '1.1rem' }}>
               Solicitar Acceso
             </Link>
-            <Link href="/login" className="btn-accent" style={{ padding: '1rem 2.5rem', fontSize: '1.1rem', background: 'transparent', border: '2px solid var(--accent)' }}>
+            <Link href="/dashboard" className="btn-accent" style={{ padding: '1rem 2.5rem', fontSize: '1.1rem', background: 'transparent', border: '2px solid var(--accent)' }}>
               Ver Noticias
             </Link>
           </div>
