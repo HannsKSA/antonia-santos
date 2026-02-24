@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+
 export default function RegisterPage() {
     const [role, setRole] = useState<'representative' | 'student' | 'teacher'>('representative');
     const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
