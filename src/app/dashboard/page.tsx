@@ -3,14 +3,19 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import CreatePost from '@/components/CreatePost';
+import NewsFeed from '@/components/NewsFeed';
 
 export const dynamic = 'force-dynamic';
+
+type Tab = 'feed' | 'approvals' | 'create-news';
 
 export default function DashboardPage() {
     const [user, setUser] = useState<any>(null);
     const [profile, setProfile] = useState<any>(null);
     const [pendingUsers, setPendingUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState<Tab>('feed');
     const router = useRouter();
 
     useEffect(() => {
@@ -28,14 +33,21 @@ export default function DashboardPage() {
                 .eq('id', user.id)
                 .single();
 
-            if (!profile || (profile.role !== 'super_admin' && profile.role !== 'admin' && profile.role !== 'teacher')) {
-                // If not admin/teacher, they might be a regular user. 
-                // For now, let's just show they are in if approved.
-                setProfile(profile);
-            } else {
-                setProfile(profile);
-                fetchPendingUsers();
+            if (!profile) {
+                router.push('/register');
+                return;
             }
+
+            setProfile(profile);
+
+            // Si es admin, cargar usuarios pendientes
+            if (['super_admin', 'admin', 'teacher'].includes(profile.role)) {
+                fetchPendingUsers();
+            } else if (profile.status !== 'approved') {
+                // Si el usuario no está aprobado, no puede ver el feed
+                setActiveTab('approvals');
+            }
+
             setLoading(false);
         }
         checkUser();
@@ -59,7 +71,7 @@ export default function DashboardPage() {
         if (!error) {
             setPendingUsers(prev => prev.filter(u => u.id !== userId));
         } else {
-            alert('Error updating status: ' + error.message);
+            alert('Error al actualizar estado: ' + error.message);
         }
     }
 
@@ -70,89 +82,117 @@ export default function DashboardPage() {
 
     if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Cargando...</div>;
 
+    const isAdmin = ['super_admin', 'admin', 'teacher'].includes(profile?.role);
+    const isApproved = profile?.status === 'approved';
+
     return (
-        <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem' }}>
+        <div style={{ padding: '1rem', maxWidth: '1000px', margin: '0 auto', minHeight: '100vh' }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
-                    <h1>Panel de Control</h1>
-                    <p style={{ color: 'var(--text-muted)' }}>Bienvenido, {profile?.first_name} ({profile?.role})</p>
+                    <h1 style={{ fontSize: '1.75rem', color: 'var(--primary)' }}>Panel de Control</h1>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                        Hola, <strong>{profile?.first_name}</strong> •
+                        <span style={{ marginLeft: '0.5rem', padding: '0.1rem 0.5rem', background: '#e2e8f0', borderRadius: '10px', fontSize: '0.8rem' }}>
+                            {profile?.role}
+                        </span>
+                    </p>
                 </div>
-                <button onClick={handleLogout} className="btn-accent" style={{ background: 'transparent', border: '1px solid var(--error)', color: 'var(--error)' }}>
+                <button onClick={handleLogout} className="btn-accent" style={{ background: 'transparent', border: '1px solid var(--error)', color: 'var(--error)', padding: '0.5rem 1rem' }}>
                     Cerrar Sesión
                 </button>
             </header>
 
-            {(profile?.role === 'super_admin' || profile?.role === 'admin' || profile?.role === 'teacher') ? (
-                <section>
-                    <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        🔔 Solicitudes Pendientes
-                        <span style={{ fontSize: '0.9rem', background: 'var(--primary)', color: 'white', padding: '0.2rem 0.6rem', borderRadius: '10px' }}>
-                            {pendingUsers.length}
-                        </span>
-                    </h2>
+            {/* Navegación por Tabs */}
+            <nav style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', overflowX: 'auto' }}>
+                <TabButton
+                    active={activeTab === 'feed'}
+                    onClick={() => setActiveTab('feed')}
+                    label="📰 Mi Feed"
+                />
+                {isAdmin && (
+                    <>
+                        <TabButton
+                            active={activeTab === 'approvals'}
+                            onClick={() => setActiveTab('approvals')}
+                            label={`🔔 Solicitudes (${pendingUsers.length})`}
+                        />
+                        <TabButton
+                            active={activeTab === 'create-news'}
+                            onClick={() => setActiveTab('create-news')}
+                            label="✍️ Publicar"
+                        />
+                    </>
+                )}
+            </nav>
 
-                    <div style={{ display: 'grid', gap: '1rem' }}>
-                        {pendingUsers.length === 0 ? (
-                            <div className="glass-card" style={{ padding: '2rem', textAlign: 'center', borderStyle: 'dashed' }}>
-                                <p style={{ color: 'var(--text-muted)' }}>No hay solicitudes pendientes en este momento.</p>
-                            </div>
-                        ) : (
-                            pendingUsers.map(u => (
-                                <div key={u.id} className="glass-card" style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                        <h4 style={{ color: 'var(--primary)' }}>{u.first_name} {u.last_name}</h4>
-                                        <p style={{ fontSize: '0.85rem' }}>
-                                            <strong>Rol solicitado:</strong> {u.sub_role === 'representative' ? 'Padre' : u.sub_role === 'student' ? 'Estudiante' : 'Docente'}
-                                        </p>
-                                        <p style={{ fontSize: '0.85rem' }}>
-                                            <strong>Representado/Grado:</strong> {u.represented_name}
-                                        </p>
-                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Solicitado el: {new Date(u.created_at).toLocaleDateString()}</p>
+            <main>
+                {activeTab === 'feed' && (
+                    isApproved ? (
+                        <NewsFeed userProfile={profile} />
+                    ) : (
+                        <div className="glass-card" style={{ padding: '3rem', textAlign: 'center' }}>
+                            <h3>⏳ Cuenta en espera de aprobación</h3>
+                            <p style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>
+                                Tu solicitud está siendo revisada por los docentes. Podrás ver las noticias una vez que seas aprobado.
+                            </p>
+                        </div>
+                    )
+                )}
+
+                {activeTab === 'approvals' && isAdmin && (
+                    <section>
+                        <h2 style={{ marginBottom: '1.5rem' }}>Solicitudes de Acceso</h2>
+                        <div style={{ display: 'grid', gap: '1rem' }}>
+                            {pendingUsers.length === 0 ? (
+                                <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>No hay solicitudes pendientes.</p>
+                            ) : (
+                                pendingUsers.map(u => (
+                                    <div key={u.id} className="glass-card" style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                                        <div>
+                                            <h4 style={{ color: 'var(--primary)' }}>{u.first_name} {u.last_name}</h4>
+                                            <p style={{ fontSize: '0.85rem' }}>
+                                                <strong>Rol:</strong> {u.sub_role === 'representative' ? 'Padre' : u.sub_role === 'student' ? 'Estudiante' : 'Docente'}
+                                            </p>
+                                            <p style={{ fontSize: '0.85rem' }}>
+                                                <strong>Referencia:</strong> {u.represented_name}
+                                            </p>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <button onClick={() => handleStatusUpdate(u.id, 'approved')} className="btn-primary" style={{ background: 'var(--success)', border: 'none', padding: '0.5rem 1rem' }}>Aprobar</button>
+                                            <button onClick={() => handleStatusUpdate(u.id, 'rejected')} className="btn-accent" style={{ background: 'var(--error)', border: 'none', padding: '0.5rem 1rem' }}>Rechazar</button>
+                                        </div>
                                     </div>
-                                    <div style={{ display: 'flex', gap: '0.75rem' }}>
-                                        <button
-                                            onClick={() => handleStatusUpdate(u.id, 'approved')}
-                                            style={{
-                                                padding: '0.5rem 1rem',
-                                                borderRadius: 'var(--radius-sm)',
-                                                background: 'rgba(16, 185, 129, 0.1)',
-                                                color: 'var(--success)',
-                                                border: '1px solid var(--success)',
-                                                fontWeight: 600
-                                            }}
-                                        >
-                                            Aprobar
-                                        </button>
-                                        <button
-                                            onClick={() => handleStatusUpdate(u.id, 'rejected')}
-                                            style={{
-                                                padding: '0.5rem 1rem',
-                                                borderRadius: 'var(--radius-sm)',
-                                                background: 'rgba(239, 68, 68, 0.1)',
-                                                color: 'var(--error)',
-                                                border: '1px solid var(--error)',
-                                                fontWeight: 600
-                                            }}
-                                        >
-                                            Rechazar
-                                        </button>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                </section>
-            ) : (
-                <section className="glass-card" style={{ padding: '3rem', textAlign: 'center' }}>
-                    <h2>¡Hola, {profile?.first_name}!</h2>
-                    <p style={{ margin: '1rem 0', color: 'var(--text-muted)' }}>
-                        Tu cuenta está activa. Pronto verás aquí el feed de noticias de tus grupos.
-                    </p>
-                    <div style={{ padding: '1rem', background: 'var(--accent-glow)', borderRadius: 'var(--radius)', display: 'inline-block' }}>
-                        🚀 Próximamente: Feed de Noticias y Eventos
-                    </div>
-                </section>
-            )}
+                                ))
+                            )}
+                        </div>
+                    </section>
+                )}
+
+                {activeTab === 'create-news' && isAdmin && (
+                    <CreatePost userProfile={profile} onPostCreated={() => setActiveTab('feed')} />
+                )}
+            </main>
         </div>
+    );
+}
+
+function TabButton({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) {
+    return (
+        <button
+            onClick={onClick}
+            style={{
+                padding: '0.75rem 1.25rem',
+                borderRadius: 'var(--radius-sm)',
+                border: 'none',
+                background: active ? 'var(--primary)' : 'transparent',
+                color: active ? 'white' : 'var(--text-muted)',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                whiteSpace: 'nowrap'
+            }}
+        >
+            {label}
+        </button>
     );
 }

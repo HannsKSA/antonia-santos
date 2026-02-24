@@ -3,21 +3,26 @@
 -- Copia y pega este contenido en el SQL Editor de Supabase
 -- ==========================================
 
--- 1. ELIMINAR TODO LO ANTERIOR (Opcional, limpiar antes de empezar)
--- DROP TABLE IF EXISTS post_reads, votes, poll_options, comments, notifications, posts, user_groups, groups, profiles CASCADE;
--- DROP TYPE IF EXISTS user_role, user_sub_role, user_status, content_type, multimedia_type CASCADE;
-
--- 2. CREACIÓN DE TIPOS ENUM
+-- 1. CREACIÓN DE TIPOS ENUM
 DO $$ BEGIN
-    CREATE TYPE user_role AS ENUM ('super_admin', 'admin', 'teacher', 'user');
-    CREATE TYPE user_sub_role AS ENUM ('representative', 'student', 'teacher');
-    CREATE TYPE user_status AS ENUM ('pending', 'approved', 'rejected');
-    CREATE TYPE content_type AS ENUM ('news', 'event', 'survey', 'proposal');
-    CREATE TYPE multimedia_type AS ENUM ('internal', 'external');
-EXCEPTION WHEN duplicate_object THEN NULL;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+        CREATE TYPE user_role AS ENUM ('super_admin', 'admin', 'teacher', 'user');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_sub_role') THEN
+        CREATE TYPE user_sub_role AS ENUM ('representative', 'student', 'teacher');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_status') THEN
+        CREATE TYPE user_status AS ENUM ('pending', 'approved', 'rejected');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'content_type') THEN
+        CREATE TYPE content_type AS ENUM ('news', 'event', 'survey', 'proposal');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'multimedia_type') THEN
+        CREATE TYPE multimedia_type AS ENUM ('internal', 'external');
+    END IF;
 END $$;
 
--- 3. TABLA DE PERFILES
+-- 2. TABLA DE PERFILES
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
   username TEXT UNIQUE,
@@ -32,21 +37,21 @@ CREATE TABLE IF NOT EXISTS profiles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. TABLA DE GRUPOS (GRADOS)
+-- 3. TABLA DE GRUPOS (GRADOS)
 CREATE TABLE IF NOT EXISTS groups (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. TABLA DE SUBSCRIPCIONES (N:M)
+-- 4. TABLA DE SUBSCRIPCIONES (N:M)
 CREATE TABLE IF NOT EXISTS user_groups (
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
   PRIMARY KEY (user_id, group_id)
 );
 
--- 6. TABLA DE POSTS (NOTICIAS/EVENTOS)
+-- 5. TABLA DE POSTS (NOTICIAS/EVENTOS)
 CREATE TABLE IF NOT EXISTS posts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   author_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
@@ -61,6 +66,14 @@ CREATE TABLE IF NOT EXISTS posts (
   is_closed BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6. TABLA DE REGISTROS DE LECTURA (ENTERADOS)
+CREATE TABLE IF NOT EXISTS post_reads (
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (post_id, user_id)
 );
 
 -- 7. INSERTAR DATOS INICIALES (GRUPOS)
@@ -87,24 +100,24 @@ ALTER TABLE user_groups ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can see their own group memberships" ON user_groups;
 CREATE POLICY "Users can see their own group memberships" ON user_groups FOR SELECT USING (auth.uid() = user_id);
 
--- 9. CONFIGURACIÓN DEL SUPER USUARIO (hannssa@gmail.com)
--- Nota: Ejecuta esto DESPUÉS de registrarte en la web.
-/*
--- PASO A: Convertir en Super Admin
-UPDATE profiles 
-SET role = 'super_admin', status = 'approved' 
-WHERE id = (SELECT id FROM auth.users WHERE email = 'hannssa@gmail.com');
+ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public posts are viewable by everyone" ON posts;
+CREATE POLICY "Public posts are viewable by everyone" ON posts FOR SELECT USING (is_published = true);
+DROP POLICY IF EXISTS "Authors and admins can manage posts" ON posts;
+CREATE POLICY "Authors and admins can manage posts" ON posts FOR ALL USING (
+  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
+);
 
--- PASO B: Vincular al grupo Administración
-INSERT INTO user_groups (user_id, group_id)
-SELECT 
-    (SELECT id FROM auth.users WHERE email = 'hannssa@gmail.com'),
-    (SELECT id FROM groups WHERE name = 'Administración')
-ON CONFLICT DO NOTHING;
-*/
+ALTER TABLE post_reads ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can insert their own reads" ON post_reads;
+CREATE POLICY "Users can insert their own reads" ON post_reads FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Authors can view reads of their posts" ON post_reads;
+CREATE POLICY "Authors can view reads of their posts" ON post_reads FOR SELECT USING (
+  EXISTS (SELECT 1 FROM posts WHERE posts.id = post_id AND posts.author_id = auth.uid()) OR 
+  EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'super_admin')
+);
 
--- 10. TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE
--- Esto asegura que cada vez que alguien se registre en Auth, tenga un perfil en la tabla profiles.
+-- 9. TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
