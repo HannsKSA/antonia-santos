@@ -23,7 +23,7 @@ export default function NewsFeed({ userProfile }: { userProfile: any }) {
                 .from('posts')
                 .select(`
                     *,
-                    author:profiles(first_name, last_name, role),
+                    author:profiles!author_id(first_name, last_name, role),
                     group:groups(name)
                 `)
                 .eq('is_published', true)
