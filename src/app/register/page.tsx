@@ -170,19 +170,25 @@ export default function RegisterPage() {
                             flexDirection: 'column',
                             gap: '0.25rem'
                         }}>
-                            {groups.map(group => (
-                                <label key={group.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedGroups.includes(group.id)}
-                                        onChange={e => {
-                                            if (e.target.checked) setSelectedGroups([...selectedGroups, group.id]);
-                                            else setSelectedGroups(selectedGroups.filter(id => id !== group.id));
-                                        }}
-                                    />
-                                    {group.name}
-                                </label>
-                            ))}
+                            {groups.length === 0 ? (
+                                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '0.5rem' }}>
+                                    Cargando grados o sin conexión...
+                                </p>
+                            ) : (
+                                groups.map(group => (
+                                    <label key={group.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedGroups.includes(group.id)}
+                                            onChange={e => {
+                                                if (e.target.checked) setSelectedGroups([...selectedGroups, group.id]);
+                                                else setSelectedGroups(selectedGroups.filter(id => id !== group.id));
+                                            }}
+                                        />
+                                        {group.name}
+                                    </label>
+                                ))
+                            )}
                         </div>
                     </div>
 
