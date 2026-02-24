@@ -1,7 +1,21 @@
 -- ==========================================
--- 🚀 SCRIPT DE INICIO: IE ANTONIA SANTOS
--- Copia y pega este contenido en el SQL Editor de Supabase
+-- 🚀 SCRIPT DE INICIO — IE ANTONIA Santos
+-- Ejecuta esto UNA sola vez en el SQL Editor de Supabase.
+-- Después de esto, el botón de Setup en /setup manejará
+-- actualizaciones automáticamente sin necesidad de volver aquí.
 -- ==========================================
+
+-- 0. FUNCIÓN AUXILIAR: exec_sql
+-- Permite que la API /api/setup ejecute SQL directamente en el futuro.
+CREATE OR REPLACE FUNCTION public.exec_sql(sql TEXT)
+RETURNS VOID AS $$
+BEGIN
+  EXECUTE sql;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- Restringir acceso solo al service_role
+REVOKE ALL ON FUNCTION public.exec_sql(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.exec_sql(TEXT) TO service_role;
 
 -- 1. CREACIÓN DE TIPOS ENUM
 DO $$ BEGIN
