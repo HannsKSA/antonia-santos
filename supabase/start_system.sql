@@ -117,7 +117,34 @@ CREATE POLICY "Authors can view reads of their posts" ON post_reads FOR SELECT U
   EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'super_admin')
 );
 
--- 9. TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE
+-- 10. TABLA DE COMENTARIOS (Para el refinamiento de propuestas)
+CREATE TABLE IF NOT EXISTS comments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 11. TABLA DE VOTOS (Apoyo social a propuestas)
+CREATE TABLE IF NOT EXISTS proposal_votes (
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  vote_type TEXT CHECK (vote_type IN ('up', 'down')),
+  PRIMARY KEY (post_id, user_id)
+);
+
+-- 12. POLÍTICAS RLS PARA COMENTARIOS Y VOTOS
+ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Comments are viewable by everyone" ON comments FOR SELECT USING (true);
+CREATE POLICY "Users can comment on posts" ON comments FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+ALTER TABLE proposal_votes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Votes are viewable by everyone" ON proposal_votes FOR SELECT USING (true);
+CREATE POLICY "Users can vote once per post" ON proposal_votes FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their vote" ON proposal_votes FOR UPDATE USING (auth.uid() = user_id);
+
+-- 13. TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE (Movido al final)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -131,3 +158,4 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+

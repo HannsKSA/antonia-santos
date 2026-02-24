@@ -5,13 +5,14 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import CreatePost from '@/components/CreatePost';
 import NewsFeed from '@/components/NewsFeed';
+import CreateProposal from '@/components/CreateProposal';
+import ProposalFeed from '@/components/ProposalFeed';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'feed' | 'approvals' | 'create-news';
+type Tab = 'feed' | 'proposals' | 'approvals' | 'create';
 
 export default function DashboardPage() {
-    const [user, setUser] = useState<any>(null);
     const [profile, setProfile] = useState<any>(null);
     const [pendingUsers, setPendingUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -25,7 +26,6 @@ export default function DashboardPage() {
                 router.push('/login');
                 return;
             }
-            setUser(user);
 
             const { data: profile } = await supabase
                 .from('profiles')
@@ -44,8 +44,7 @@ export default function DashboardPage() {
             if (['super_admin', 'admin', 'teacher'].includes(profile.role)) {
                 fetchPendingUsers();
             } else if (profile.status !== 'approved') {
-                // Si el usuario no está aprobado, no puede ver el feed
-                setActiveTab('approvals');
+                setActiveTab('feed');
             }
 
             setLoading(false);
@@ -95,6 +94,7 @@ export default function DashboardPage() {
                         <span style={{ marginLeft: '0.5rem', padding: '0.1rem 0.5rem', background: '#e2e8f0', borderRadius: '10px', fontSize: '0.8rem' }}>
                             {profile?.role}
                         </span>
+                        {profile?.status === 'pending' && <span style={{ marginLeft: '0.5rem', color: 'var(--error)' }}>(Pendiente de aprobación)</span>}
                     </p>
                 </div>
                 <button onClick={handleLogout} className="btn-accent" style={{ background: 'transparent', border: '1px solid var(--error)', color: 'var(--error)', padding: '0.5rem 1rem' }}>
@@ -104,39 +104,43 @@ export default function DashboardPage() {
 
             {/* Navegación por Tabs */}
             <nav style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', overflowX: 'auto' }}>
-                <TabButton
-                    active={activeTab === 'feed'}
-                    onClick={() => setActiveTab('feed')}
-                    label="📰 Mi Feed"
-                />
+                <TabButton active={activeTab === 'feed'} onClick={() => setActiveTab('feed')} label="📰 Noticias" />
+                <TabButton active={activeTab === 'proposals'} onClick={() => setActiveTab('proposals')} label="💡 Propuestas" />
+
+                {isApproved && (
+                    <TabButton active={activeTab === 'create'} onClick={() => setActiveTab('create')} label="✍️ Crear" />
+                )}
+
                 {isAdmin && (
-                    <>
-                        <TabButton
-                            active={activeTab === 'approvals'}
-                            onClick={() => setActiveTab('approvals')}
-                            label={`🔔 Solicitudes (${pendingUsers.length})`}
-                        />
-                        <TabButton
-                            active={activeTab === 'create-news'}
-                            onClick={() => setActiveTab('create-news')}
-                            label="✍️ Publicar"
-                        />
-                    </>
+                    <TabButton
+                        active={activeTab === 'approvals'}
+                        onClick={() => setActiveTab('approvals')}
+                        label={`🔔 Solicitudes (${pendingUsers.length})`}
+                    />
                 )}
             </nav>
 
             <main>
                 {activeTab === 'feed' && (
-                    isApproved ? (
-                        <NewsFeed userProfile={profile} />
-                    ) : (
-                        <div className="glass-card" style={{ padding: '3rem', textAlign: 'center' }}>
-                            <h3>⏳ Cuenta en espera de aprobación</h3>
-                            <p style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>
-                                Tu solicitud está siendo revisada por los docentes. Podrás ver las noticias una vez que seas aprobado.
-                            </p>
-                        </div>
-                    )
+                    isApproved ? <NewsFeed userProfile={profile} /> : <PendingMessage />
+                )}
+
+                {activeTab === 'proposals' && (
+                    isApproved ? <ProposalFeed userProfile={profile} /> : <PendingMessage />
+                )}
+
+                {activeTab === 'create' && isApproved && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                        {isAdmin && (
+                            <section>
+                                <CreatePost userProfile={profile} onPostCreated={() => setActiveTab('feed')} />
+                                <div style={{ height: '1px', background: '#e2e8f0', margin: '2rem 0' }} />
+                            </section>
+                        )}
+                        <section>
+                            <CreateProposal userProfile={profile} onCreated={() => setActiveTab('proposals')} />
+                        </section>
+                    </div>
                 )}
 
                 {activeTab === 'approvals' && isAdmin && (
@@ -158,8 +162,8 @@ export default function DashboardPage() {
                                             </p>
                                         </div>
                                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                            <button onClick={() => handleStatusUpdate(u.id, 'approved')} className="btn-primary" style={{ background: 'var(--success)', border: 'none', padding: '0.5rem 1rem' }}>Aprobar</button>
-                                            <button onClick={() => handleStatusUpdate(u.id, 'rejected')} className="btn-accent" style={{ background: 'var(--error)', border: 'none', padding: '0.5rem 1rem' }}>Rechazar</button>
+                                            <button onClick={() => handleStatusUpdate(u.id, 'approved')} className="btn-primary" style={{ background: 'var(--success)', border: 'none', padding: '0.4rem 0.8rem' }}>✓ Aprobar</button>
+                                            <button onClick={() => handleStatusUpdate(u.id, 'rejected')} className="btn-accent" style={{ background: 'var(--error)', border: 'none', padding: '0.4rem 0.8rem' }}>✕ Rechazar</button>
                                         </div>
                                     </div>
                                 ))
@@ -167,11 +171,18 @@ export default function DashboardPage() {
                         </div>
                     </section>
                 )}
-
-                {activeTab === 'create-news' && isAdmin && (
-                    <CreatePost userProfile={profile} onPostCreated={() => setActiveTab('feed')} />
-                )}
             </main>
+        </div>
+    );
+}
+
+function PendingMessage() {
+    return (
+        <div className="glass-card" style={{ padding: '3rem', textAlign: 'center' }}>
+            <h3>⏳ Cuenta en espera de aprobación</h3>
+            <p style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>
+                Tu solicitud está siendo revisada por los docentes. Podrás interactuar con noticias y propuestas una vez seas aprobado.
+            </p>
         </div>
     );
 }
