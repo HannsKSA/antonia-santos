@@ -7,10 +7,11 @@ import CreatePost from '@/components/CreatePost';
 import NewsFeed from '@/components/NewsFeed';
 import CreateProposal from '@/components/CreateProposal';
 import ProposalFeed from '@/components/ProposalFeed';
+import ReportsPanel from '@/components/ReportsPanel';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'feed' | 'proposals' | 'approvals' | 'create';
+type Tab = 'feed' | 'proposals' | 'approvals' | 'create' | 'metrics';
 
 export default function DashboardPage() {
     const [profile, setProfile] = useState<any>(null);
@@ -107,6 +108,10 @@ export default function DashboardPage() {
                 <TabButton active={activeTab === 'feed'} onClick={() => setActiveTab('feed')} label="📰 Noticias" />
                 <TabButton active={activeTab === 'proposals'} onClick={() => setActiveTab('proposals')} label="💡 Propuestas" />
 
+                {isAdmin && (
+                    <TabButton active={activeTab === 'metrics'} onClick={() => setActiveTab('metrics')} label="📊 Métricas" />
+                )}
+
                 {isApproved && (
                     <TabButton active={activeTab === 'create'} onClick={() => setActiveTab('create')} label="✍️ Crear" />
                 )}
@@ -121,6 +126,10 @@ export default function DashboardPage() {
             </nav>
 
             <main>
+                {activeTab === 'metrics' && isAdmin && (
+                    <ReportsPanel userProfile={profile} />
+                )}
+
                 {activeTab === 'feed' && (
                     isApproved ? <NewsFeed userProfile={profile} /> : <PendingMessage />
                 )}
