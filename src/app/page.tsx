@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export default function Home() {
   return (
     <main>
@@ -5,9 +7,28 @@ export default function Home() {
       <section style={{
         padding: '6rem 0',
         background: 'radial-gradient(circle at top right, #e2e8f0 0%, #f8fafc 100%)',
-        textAlign: 'center'
+        textAlign: 'center',
+        position: 'relative',
+        overflow: 'hidden'
       }}>
-        <div className="container animate-fade-in">
+        {/* Marca de Agua Logo */}
+        <div style={{
+          position: 'absolute',
+          top: '55%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '600px',
+          height: '600px',
+          backgroundImage: 'url("/logo.png")',
+          backgroundSize: 'contain',
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'center',
+          opacity: 0.05,
+          pointerEvents: 'none',
+          zIndex: 0,
+          filter: 'grayscale(1) brightness(1.2)'
+        }} />
+        <div className="container animate-fade-in" style={{ position: 'relative', zIndex: 1 }}>
           <h1 style={{ fontSize: '3.5rem', marginBottom: '1.5rem', maxWidth: '800px', margin: '0 auto 1.5rem' }}>
             Transformando la Comunicación en Nuestra Comunidad
           </h1>
@@ -16,12 +37,12 @@ export default function Home() {
             IE Antonia Santos.
           </p>
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-            <button className="btn-primary" style={{ padding: '1rem 2.5rem', fontSize: '1.1rem' }}>
+            <Link href="/register" className="btn-primary" style={{ padding: '1rem 2.5rem', fontSize: '1.1rem' }}>
               Solicitar Acceso
-            </button>
-            <button className="btn-accent" style={{ padding: '1rem 2.5rem', fontSize: '1.1rem', background: 'transparent', border: '2px solid var(--accent)' }}>
+            </Link>
+            <Link href="/login" className="btn-accent" style={{ padding: '1rem 2.5rem', fontSize: '1.1rem', background: 'transparent', border: '2px solid var(--accent)' }}>
               Ver Noticias
-            </button>
+            </Link>
           </div>
         </div>
       </section>

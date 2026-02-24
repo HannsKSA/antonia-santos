@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: "IE Antonia Santos - Consejo de Padres",
@@ -33,12 +34,12 @@ export default function RootLayout({
             <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '1.2rem' }}>IE Antonia Santos</span>
           </div>
           <div style={{ display: 'flex', gap: '2rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-            <a href="#" style={{ color: 'var(--primary)' }}>Inicio</a>
-            <a href="#">Noticias</a>
-            <a href="#">Propuestas</a>
+            <Link href="/" style={{ color: 'var(--primary)' }}>Inicio</Link>
+            <Link href="/login">Noticias</Link>
+            <Link href="/login">Propuestas</Link>
           </div>
           <div>
-            <button className="btn-primary">Ingresar</button>
+            <Link href="/login" className="btn-primary">Ingresar</Link>
           </div>
         </nav>
         {children}
