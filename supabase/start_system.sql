@@ -145,52 +145,77 @@ CREATE TABLE IF NOT EXISTS reports (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 13. POLÍTICAS RLS ACTUALIZADAS
+-- 13. POLÍTICAS RLS ACTUALIZADAS (Idempotentes - se pueden ejecutar múltiples veces)
 
--- POSTS: Moderación
+-- POSTS: Moderación por roles
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Authors and admins can manage posts" ON posts;
+DROP POLICY IF EXISTS "Public posts are viewable by everyone" ON posts;
+DROP POLICY IF EXISTS "Super Admins have full control over posts" ON posts;
+DROP POLICY IF EXISTS "Admins and Teachers can edit or hide posts" ON posts;
 
--- Super Admin: Control Total
+CREATE POLICY "Public posts are viewable by everyone" ON posts 
+FOR SELECT USING (is_published = true);
+
 CREATE POLICY "Super Admins have full control over posts" ON posts 
 FOR ALL USING (
   auth.uid() IN (SELECT id FROM profiles WHERE role = 'super_admin')
 );
 
--- Admins y Docentes: Editar y Ocultar (Update)
 CREATE POLICY "Admins and Teachers can edit or hide posts" ON posts 
 FOR UPDATE USING (
   auth.uid() IN (SELECT id FROM profiles WHERE role IN ('admin', 'teacher'))
 );
 
--- COMENTARIOS: Moderación
+CREATE POLICY "Authors can create posts" ON posts 
+FOR INSERT WITH CHECK (
+  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
+);
+
+-- COMENTARIOS: Moderación por roles
 ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Comments are viewable by everyone" ON comments;
 DROP POLICY IF EXISTS "Users can comment on posts" ON comments;
+DROP POLICY IF EXISTS "Users can edit their own comments" ON comments;
+DROP POLICY IF EXISTS "Super Admins can delete or hide comments" ON comments;
+DROP POLICY IF EXISTS "Admins can hide comments" ON comments;
 
--- Creador puede Editar (Update)
-CREATE POLICY "Users can edit their own comments" ON comments 
-FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Comments are viewable by everyone" ON comments FOR SELECT USING (true);
+CREATE POLICY "Users can insert comments" ON comments FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can edit their own comments" ON comments FOR UPDATE USING (auth.uid() = user_id);
 
--- Super Admin: Borrar/Ocultar
-CREATE POLICY "Super Admins can delete or hide comments" ON comments 
-FOR ALL USING (
+CREATE POLICY "Super Admins can delete or hide comments" ON comments FOR ALL USING (
   auth.uid() IN (SELECT id FROM profiles WHERE role = 'super_admin')
 );
 
--- Admins: Ocultar (Update is_published/content)
-CREATE POLICY "Admins can hide comments" ON comments 
-FOR UPDATE USING (
+CREATE POLICY "Admins can hide comments" ON comments FOR UPDATE USING (
   auth.uid() IN (SELECT id FROM profiles WHERE role IN ('admin', 'teacher'))
 );
 
--- REPORTES: Privacidad
+-- VOTOS
+ALTER TABLE proposal_votes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Votes are viewable by everyone" ON proposal_votes;
+DROP POLICY IF EXISTS "Users can vote once per post" ON proposal_votes;
+DROP POLICY IF EXISTS "Users can update their vote" ON proposal_votes;
+
+CREATE POLICY "Votes are viewable by everyone" ON proposal_votes FOR SELECT USING (true);
+CREATE POLICY "Users can vote once per post" ON proposal_votes FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their vote" ON proposal_votes FOR UPDATE USING (auth.uid() = user_id);
+
+-- REPORTES: Solo admins ven, cualquier usuario puede crear
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can create reports" ON reports;
+DROP POLICY IF EXISTS "Only admins can view reports" ON reports;
+
 CREATE POLICY "Users can create reports" ON reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
 CREATE POLICY "Only admins can view reports" ON reports FOR SELECT USING (
   auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
 );
+CREATE POLICY "Admins can update report status" ON reports FOR UPDATE USING (
+  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin'))
+);
 
--- 14. TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE (Movido al final)
+-- 14. TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -204,5 +229,3 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
-
-
