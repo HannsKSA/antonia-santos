@@ -14,19 +14,19 @@ export default function Home() {
         {/* Marca de Agua Logo */}
         <div style={{
           position: 'absolute',
-          top: '55%',
+          top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          width: '600px',
-          height: '600px',
+          width: '550px',
+          height: '550px',
           backgroundImage: 'url("/logo.png")',
           backgroundSize: 'contain',
           backgroundRepeat: 'no-repeat',
           backgroundPosition: 'center',
-          opacity: 0.05,
+          opacity: 0.12,
           pointerEvents: 'none',
           zIndex: 0,
-          filter: 'grayscale(1) brightness(1.2)'
+          filter: 'grayscale(0.5)'
         }} />
         <div className="container animate-fade-in" style={{ position: 'relative', zIndex: 1 }}>
           <h1 style={{ fontSize: '3.5rem', marginBottom: '1.5rem', maxWidth: '800px', margin: '0 auto 1.5rem' }}>
