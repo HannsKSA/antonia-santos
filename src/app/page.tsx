@@ -18,16 +18,21 @@ export default function Home() {
           left: '50%',
           transform: 'translate(-50%, -50%)',
           width: '550px',
-          height: '550px',
-          backgroundImage: 'url("/logo.png")',
-          backgroundSize: 'contain',
-          backgroundRepeat: 'no-repeat',
-          backgroundPosition: 'center',
-          opacity: 0.12,
+          height: 'auto',
+          opacity: 0.15,
           pointerEvents: 'none',
           zIndex: 0,
-          filter: 'grayscale(0.5)'
-        }} />
+          filter: 'grayscale(0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}>
+          <img
+            src="/logo.png"
+            alt="Watermark"
+            style={{ width: '100%', height: 'auto', objectFit: 'contain' }}
+          />
+        </div>
         <div className="container animate-fade-in" style={{ position: 'relative', zIndex: 1 }}>
           <h1 style={{ fontSize: '3.5rem', marginBottom: '1.5rem', maxWidth: '800px', margin: '0 auto 1.5rem' }}>
             Transformando la Comunicación en Nuestra Comunidad
