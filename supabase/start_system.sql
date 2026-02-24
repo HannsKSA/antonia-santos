@@ -134,17 +134,63 @@ CREATE TABLE IF NOT EXISTS proposal_votes (
   PRIMARY KEY (post_id, user_id)
 );
 
--- 12. POLÍTICAS RLS PARA COMENTARIOS Y VOTOS
+-- 12. TABLA DE REPORTES (Denuncias)
+CREATE TABLE IF NOT EXISTS reports (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  reporter_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+  comment_id UUID REFERENCES comments(id) ON DELETE CASCADE,
+  reason TEXT NOT NULL,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'reviewed', 'dismissed')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 13. POLÍTICAS RLS ACTUALIZADAS
+
+-- POSTS: Moderación
+ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authors and admins can manage posts" ON posts;
+
+-- Super Admin: Control Total
+CREATE POLICY "Super Admins have full control over posts" ON posts 
+FOR ALL USING (
+  auth.uid() IN (SELECT id FROM profiles WHERE role = 'super_admin')
+);
+
+-- Admins y Docentes: Editar y Ocultar (Update)
+CREATE POLICY "Admins and Teachers can edit or hide posts" ON posts 
+FOR UPDATE USING (
+  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('admin', 'teacher'))
+);
+
+-- COMENTARIOS: Moderación
 ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Comments are viewable by everyone" ON comments FOR SELECT USING (true);
-CREATE POLICY "Users can comment on posts" ON comments FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can comment on posts" ON comments;
 
-ALTER TABLE proposal_votes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Votes are viewable by everyone" ON proposal_votes FOR SELECT USING (true);
-CREATE POLICY "Users can vote once per post" ON proposal_votes FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update their vote" ON proposal_votes FOR UPDATE USING (auth.uid() = user_id);
+-- Creador puede Editar (Update)
+CREATE POLICY "Users can edit their own comments" ON comments 
+FOR UPDATE USING (auth.uid() = user_id);
 
--- 13. TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE (Movido al final)
+-- Super Admin: Borrar/Ocultar
+CREATE POLICY "Super Admins can delete or hide comments" ON comments 
+FOR ALL USING (
+  auth.uid() IN (SELECT id FROM profiles WHERE role = 'super_admin')
+);
+
+-- Admins: Ocultar (Update is_published/content)
+CREATE POLICY "Admins can hide comments" ON comments 
+FOR UPDATE USING (
+  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('admin', 'teacher'))
+);
+
+-- REPORTES: Privacidad
+ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can create reports" ON reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
+CREATE POLICY "Only admins can view reports" ON reports FOR SELECT USING (
+  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
+);
+
+-- 14. TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE (Movido al final)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -158,4 +204,5 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
 
