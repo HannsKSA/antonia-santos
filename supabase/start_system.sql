@@ -113,6 +113,9 @@ CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.
 ALTER TABLE user_groups ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can see their own group memberships" ON user_groups;
 CREATE POLICY "Users can see their own group memberships" ON user_groups FOR SELECT USING (auth.uid() = user_id);
+-- Permite que un usuario recién registrado se asocie a sus propios grupos
+DROP POLICY IF EXISTS "Users can insert their own group memberships" ON user_groups;
+CREATE POLICY "Users can insert their own group memberships" ON user_groups FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public posts are viewable by everyone" ON posts;
