@@ -12,6 +12,7 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
     // Edit Modal State
     const [editingUser, setEditingUser] = useState<any>(null);
     const [editForm, setEditForm] = useState({
+        email: '',
         first_name: '',
         last_name: '',
         username: '',
@@ -24,11 +25,13 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
 
     const fetchData = async () => {
         setLoading(true);
-        // Fetch Users
-        const { data: usersData } = await supabase
+        // Fetch Users joined with user_groups
+        const { data: usersData, error: uError } = await supabase
             .from('profiles')
             .select('*, user_groups(group_id)')
             .order('last_name', { ascending: true });
+
+        if (uError) console.error("Error fetching users:", uError);
 
         // Fetch Groups
         const { data: groupsData } = await supabase.from('groups').select('*').order('name');
@@ -45,6 +48,7 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
     const handleEditOpen = (user: any) => {
         setEditingUser(user);
         setEditForm({
+            email: user.email || '',
             first_name: user.first_name || '',
             last_name: user.last_name || '',
             username: user.username || '',
@@ -67,9 +71,9 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
 
             const data = await res.json();
             if (res.ok) {
-                alert('Usuario actualizado');
+                alert('Usuario actualizado correctamente');
                 setEditingUser(null);
-                fetchData();
+                await fetchData(); // Recargar datos para confirmar cambios
             } else {
                 alert('Error: ' + data.error);
             }
@@ -97,13 +101,16 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
         <div className="glass-card" style={{ padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                 <h3 style={{ color: 'var(--primary)' }}>👥 Gestión Total de Usuarios</h3>
-                <input
-                    type="text"
-                    placeholder="Buscar usuario..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid #ddd', minWidth: '250px' }}
-                />
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <button onClick={fetchData} className="btn-accent" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>🔄 Refrescar</button>
+                    <input
+                        type="text"
+                        placeholder="Buscar por nombre, correo o usuario..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid #ddd', minWidth: '350px' }}
+                    />
+                </div>
             </div>
 
             {loading ? <p>Cargando información...</p> : (
@@ -112,6 +119,7 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
                         <thead>
                             <tr style={{ textAlign: 'left', borderBottom: '2px solid #edf2f7' }}>
                                 <th style={{ padding: '1rem' }}>Usuario / Nombre</th>
+                                <th style={{ padding: '1rem' }}>Correo Electrónico</th>
                                 <th style={{ padding: '1rem' }}>Rol / Estado</th>
                                 <th style={{ padding: '1rem' }}>Grados/Grupos</th>
                                 <th style={{ padding: '1rem' }}>Acciones</th>
@@ -123,6 +131,9 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
                                     <td style={{ padding: '1rem' }}>
                                         <div style={{ fontWeight: 600 }}>{u.first_name} {u.last_name}</div>
                                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>@{u.username || 'sin_user'}</div>
+                                    </td>
+                                    <td style={{ padding: '1rem' }}>
+                                        <div style={{ fontSize: '0.85rem' }}>{u.email || <span style={{ color: '#ccc' }}>Sin correo</span>}</div>
                                     </td>
                                     <td style={{ padding: '1rem' }}>
                                         <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}>{u.role.toUpperCase()}</div>
@@ -161,9 +172,14 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
             {editingUser && (
                 <div style={modalOverlayStyle}>
                     <div className="glass-card" style={modalContentStyle}>
-                        <h3 style={{ marginBottom: '1.5rem', color: 'var(--primary)' }}>Editar Usuario: {editingUser.email}</h3>
+                        <h3 style={{ marginBottom: '1.5rem', color: 'var(--primary)' }}>Editar Usuario</h3>
 
                         <form onSubmit={handleEditSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div>
+                                <label style={labelStyle}>Correo Electrónico (Auth)</label>
+                                <input type="email" value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} style={inputStyle} />
+                            </div>
+
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div>
                                     <label style={labelStyle}>Nombres</label>
@@ -182,7 +198,7 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
                                 </div>
                                 <div>
                                     <label style={labelStyle}>Nueva Clave (opcional)</label>
-                                    <input type="password" placeholder="Solo si desea cambiarla" onChange={e => setEditForm({ ...editForm, password: e.target.value })} style={inputStyle} />
+                                    <input type="password" placeholder="Mínimo 6 caracteres" onChange={e => setEditForm({ ...editForm, password: e.target.value })} style={inputStyle} />
                                 </div>
                             </div>
 

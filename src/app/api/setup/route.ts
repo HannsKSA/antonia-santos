@@ -94,11 +94,20 @@ export async function POST() {
 
                 CREATE TABLE IF NOT EXISTS profiles (
                   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
+                  email TEXT,
                   username TEXT UNIQUE, first_name TEXT, last_name TEXT, phone TEXT,
                   role user_role DEFAULT 'user', sub_role user_sub_role,
                   status user_status DEFAULT 'pending', represented_name TEXT,
                   created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
                 );
+
+                DO $$ 
+                BEGIN 
+                  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='profiles' AND column_name='email') THEN
+                    ALTER TABLE profiles ADD COLUMN email TEXT;
+                  END IF;
+                END $$;
+
                 CREATE TABLE IF NOT EXISTS groups (
                   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
                   name TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ DEFAULT NOW()
@@ -400,8 +409,12 @@ export async function POST() {
     async () => {
       if (!userId) throw new Error('No se pudo obtener el userId del admin');
       const { error } = await admin.from('profiles').upsert({
-        id: userId, role: 'super_admin', status: 'approved',
-        first_name: 'Super', last_name: 'Admin'
+        id: userId,
+        email: adminEmail,
+        role: 'super_admin',
+        status: 'approved',
+        first_name: 'Super',
+        last_name: 'Admin'
       }, { onConflict: 'id' });
       if (error) throw error;
     }

@@ -39,6 +39,7 @@ END $$;
 -- 2. TABLA DE PERFILES
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
+  email TEXT,
   username TEXT UNIQUE,
   first_name TEXT,
   last_name TEXT,
