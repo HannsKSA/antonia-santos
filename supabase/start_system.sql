@@ -84,6 +84,17 @@ CREATE TABLE IF NOT EXISTS posts (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Asegurar columnas nuevas en tabla existente
+DO $$ 
+BEGIN 
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='posts' AND column_name='media') THEN
+    ALTER TABLE posts ADD COLUMN media JSONB DEFAULT '[]'::jsonb;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='posts' AND column_name='is_public') THEN
+    ALTER TABLE posts ADD COLUMN is_public BOOLEAN DEFAULT FALSE;
+  END IF;
+END $$;
+
 -- 6. TABLA DE REGISTROS DE LECTURA (ENTERADOS)
 CREATE TABLE IF NOT EXISTS post_reads (
   post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
@@ -151,7 +162,11 @@ CREATE TABLE IF NOT EXISTS reports (
 -- POSTS
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public posts are viewable by everyone" ON posts;
-CREATE POLICY "Public posts are viewable by everyone" ON posts FOR SELECT USING (is_published = true);
+CREATE POLICY "Public posts are viewable by everyone" ON posts 
+FOR SELECT USING (
+  (is_published = true AND (is_public = true OR auth.uid() IS NOT NULL))
+  OR auth.uid() = author_id
+);
 
 DROP POLICY IF EXISTS "Super Admins have full control over posts" ON posts;
 CREATE POLICY "Super Admins have full control over posts" ON posts FOR ALL USING (
@@ -228,7 +243,22 @@ CREATE POLICY "Users can vote in polls" ON votes FOR INSERT WITH CHECK (auth.uid
 DROP POLICY IF EXISTS "Users can change their poll vote" ON votes;
 CREATE POLICY "Users can change their poll vote" ON votes FOR UPDATE USING (auth.uid() = user_id);
 
--- 16. REPORTES
+-- 16. TABLA DE LIKES (Noticias)
+CREATE TABLE IF NOT EXISTS post_likes (
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  PRIMARY KEY (post_id, user_id)
+);
+
+ALTER TABLE post_likes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Likes are viewable by everyone" ON post_likes;
+CREATE POLICY "Likes are viewable by everyone" ON post_likes FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Users can like posts" ON post_likes;
+CREATE POLICY "Users can like posts" ON post_likes FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can unlike posts" ON post_likes;
+CREATE POLICY "Users can unlike posts" ON post_likes FOR DELETE USING (auth.uid() = user_id);
+
+-- 17. REPORTES
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can create reports" ON reports;
 CREATE POLICY "Users can create reports" ON reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);

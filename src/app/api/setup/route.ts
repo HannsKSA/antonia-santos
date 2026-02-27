@@ -120,6 +120,17 @@ export async function POST() {
                   is_closed BOOLEAN DEFAULT FALSE,
                   created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
                 );
+                -- Asegurar que las columnas nuevas existan si la tabla ya había sido creada antes
+                DO $$ 
+                BEGIN 
+                  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='posts' AND column_name='media') THEN
+                    ALTER TABLE posts ADD COLUMN media JSONB DEFAULT '[]'::jsonb;
+                  END IF;
+                  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='posts' AND column_name='is_public') THEN
+                    ALTER TABLE posts ADD COLUMN is_public BOOLEAN DEFAULT FALSE;
+                  END IF;
+                END $$;
+
                 CREATE TABLE IF NOT EXISTS post_reads (
                   post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
                   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
@@ -130,6 +141,11 @@ export async function POST() {
                   post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
                   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
                   content TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE TABLE IF NOT EXISTS post_likes (
+                  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+                  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+                  PRIMARY KEY (post_id, user_id)
                 );
                 CREATE TABLE IF NOT EXISTS proposal_votes (
                   post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
@@ -264,6 +280,18 @@ export async function POST() {
                   ON comments FOR ALL USING (
                     auth.uid() IN (SELECT id FROM profiles WHERE role = 'super_admin')
                   );
+
+                -- POST_LIKES
+                ALTER TABLE post_likes ENABLE ROW LEVEL SECURITY;
+                DROP POLICY IF EXISTS "Likes are viewable by everyone" ON post_likes;
+                CREATE POLICY "Likes are viewable by everyone"
+                  ON post_likes FOR SELECT USING (true);
+                DROP POLICY IF EXISTS "Users can like posts" ON post_likes;
+                CREATE POLICY "Users can like posts"
+                  ON post_likes FOR INSERT WITH CHECK (auth.uid() = user_id);
+                DROP POLICY IF EXISTS "Users can unlike posts" ON post_likes;
+                CREATE POLICY "Users can unlike posts"
+                  ON post_likes FOR DELETE USING (auth.uid() = user_id);
 
                 -- VOTES
                 ALTER TABLE proposal_votes ENABLE ROW LEVEL SECURITY;

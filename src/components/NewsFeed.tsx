@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 
 type PostAction = 'idle' | 'editing';
+type NewsFilter = 'visible' | 'hidden' | 'all';
 
 function MediaCarousel({ media }: { media: any[] }) {
     if (!media || media.length === 0) return null;
@@ -44,9 +45,11 @@ function PostCard({ post, userProfile, onRefresh }: { post: any; userProfile?: a
     const [editTitle, setEditTitle] = useState(post.title);
     const [editContent, setEditContent] = useState(post.content);
     const [saving, setSaving] = useState(false);
+    const [liking, setLiking] = useState(false);
 
     const isAdmin = userProfile && ['super_admin', 'admin', 'teacher'].includes(userProfile.role);
     const isSuperAdmin = userProfile && userProfile.role === 'super_admin';
+    const isOwner = userProfile && userProfile.id === post.author_id;
 
     const handleHide = async () => {
         if (!confirm('¿Ocultar esta noticia?')) return;
@@ -55,8 +58,14 @@ function PostCard({ post, userProfile, onRefresh }: { post: any; userProfile?: a
         else onRefresh();
     };
 
+    const handleRestore = async () => {
+        const { error } = await supabase.from('posts').update({ is_published: true }).eq('id', post.id);
+        if (error) alert('Error: ' + error.message);
+        else onRefresh();
+    };
+
     const handleDelete = async () => {
-        if (!confirm('¿ELIMINAR permanentemente esta noticia? Esta acción no se puede deshacer.')) return;
+        if (!confirm('¿ELIMINAR permanentemente esta noticia?')) return;
         const { error } = await supabase.from('posts').delete().eq('id', post.id);
         if (error) alert('Error: ' + error.message);
         else onRefresh();
@@ -70,10 +79,33 @@ function PostCard({ post, userProfile, onRefresh }: { post: any; userProfile?: a
         else { setAction('idle'); onRefresh(); }
     };
 
+    const handleLike = async () => {
+        if (!userProfile || liking) return;
+        setLiking(true);
+        try {
+            if (post.isLiked) {
+                await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', userProfile.id);
+            } else {
+                await supabase.from('post_likes').insert({ post_id: post.id, user_id: userProfile.id });
+            }
+            onRefresh();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLiking(false);
+        }
+    };
+
+    const isHidden = !post.is_published;
     const mediaItems = post.media || (post.multimedia_url ? [{ url: post.multimedia_url, type: post.multimedia_url.match(/\.(mp4|webm|ogg|mov)$/i) ? 'video' : 'image' }] : []);
 
     return (
-        <article className="glass-card" style={{ padding: '2rem', borderLeft: post.is_public ? '4px solid #3b82f6' : '4px solid var(--accent)', position: 'relative' }}>
+        <article className="glass-card" style={{
+            padding: isHidden ? '1rem 2rem' : '2rem',
+            borderLeft: isHidden ? '4px solid #94a3b8' : (post.is_public ? '4px solid #3b82f6' : '4px solid var(--accent)'),
+            opacity: isHidden ? 0.8 : 1,
+            position: 'relative'
+        }}>
             {action === 'editing' ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <input value={editTitle} onChange={e => setEditTitle(e.target.value)} style={inputStyle} />
@@ -88,28 +120,57 @@ function PostCard({ post, userProfile, onRefresh }: { post: any; userProfile?: a
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
                         <div>
                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                {isHidden && <span style={{ ...badgeStyle, background: '#f1f5f9', color: '#64748b' }}>🙈 OCULTA</span>}
                                 {post.is_public && <span style={{ ...badgeStyle, background: '#dbeafe', color: '#1e40af' }}>🌍 PÚBLICA</span>}
                                 <span style={badgeStyle}>{post.group?.name || 'General'}</span>
                             </div>
-                            <h3 style={{ marginTop: '0.5rem', color: 'var(--primary)' }}>{post.title}</h3>
+                            <h3 style={{ marginTop: '0.5rem', color: isHidden ? '#64748b' : 'var(--primary)' }}>{post.title}</h3>
                         </div>
                         <time style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                             {new Date(post.created_at).toLocaleDateString()}
                         </time>
                     </div>
-                    <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#4a5568', marginTop: '1rem', marginBottom: '1.5rem' }}>{post.content}</p>
 
-                    <MediaCarousel media={mediaItems} />
+                    {!isHidden && (
+                        <>
+                            <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#4a5568', marginTop: '1rem', marginBottom: '1.5rem' }}>{post.content}</p>
+                            <MediaCarousel media={mediaItems} />
+                        </>
+                    )}
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #edf2f7', paddingTop: '1rem', marginTop: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                            Por: <strong>{post.author?.first_name} {post.author?.last_name}</strong>
-                        </span>
-                        {isAdmin && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #edf2f7', paddingTop: '1rem', marginTop: isHidden ? '0.5rem' : '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                Por: <strong>{post.author?.first_name} {post.author?.last_name}</strong>
+                            </span>
+                            {!isHidden && (
+                                <button onClick={handleLike} disabled={!userProfile || liking} style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: userProfile ? 'pointer' : 'default',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.3rem',
+                                    color: post.isLiked ? 'var(--error)' : 'var(--text-muted)',
+                                    fontWeight: 600,
+                                    fontSize: '0.9rem'
+                                }}>
+                                    {post.isLiked ? '❤️' : '🤍'} {post.likesCount || 0}
+                                </button>
+                            )}
+                        </div>
+
+                        {(isAdmin || isOwner) && (
                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                <button onClick={() => setAction('editing')} style={{ ...ghostBtn, color: 'var(--primary)' }}>✏️ Editar</button>
-                                <button onClick={handleHide} style={{ ...ghostBtn, color: '#d97706' }}>🙈 Ocultar</button>
-                                {isSuperAdmin && (
+                                {isHidden ? (
+                                    <button onClick={handleRestore} style={{ ...ghostBtn, color: 'var(--success)' }}>👁️ Visualizar</button>
+                                ) : (
+                                    <>
+                                        <button onClick={() => setAction('editing')} style={{ ...ghostBtn, color: 'var(--primary)' }}>✏️ Editar</button>
+                                        <button onClick={handleHide} style={{ ...ghostBtn, color: '#d97706' }}>🙈 Ocultar</button>
+                                    </>
+                                )}
+                                {(isSuperAdmin || (isOwner && isHidden)) && (
                                     <button onClick={handleDelete} style={{ ...ghostBtn, color: 'var(--error)' }}>🗑️ Eliminar</button>
                                 )}
                             </div>
@@ -125,6 +186,7 @@ export default function NewsFeed({ userProfile, onlyPublic = false }: { userProf
     const [posts, setPosts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [readPosts, setReadPosts] = useState<string[]>([]);
+    const [filter, setFilter] = useState<NewsFilter>('visible');
 
     const fetchFeed = async () => {
         setLoading(true);
@@ -133,29 +195,45 @@ export default function NewsFeed({ userProfile, onlyPublic = false }: { userProf
                 .from('posts')
                 .select('*, author:profiles!author_id(first_name, last_name, role), group:groups(name)')
                 .eq('type', 'news')
-                .eq('is_published', true)
                 .order('created_at', { ascending: false });
 
+            // Base visibility
             if (onlyPublic || !userProfile) {
-                query = query.eq('is_public', true);
+                query = query.eq('is_public', true).eq('is_published', true);
             } else {
-                // Not only public, and we have a user profile
-                if (!['super_admin', 'admin', 'teacher'].includes(userProfile.role)) {
+                const isAdmin = ['super_admin', 'admin', 'teacher'].includes(userProfile.role);
+
+                if (!isAdmin) {
+                    // Regular user: can only see published news from their groups or public
                     const { data: userGroups } = await supabase.from('user_groups').select('group_id').eq('user_id', userProfile.id);
                     const groupIds = userGroups?.map(ug => ug.group_id) || [];
-
                     const { data: generalGroup } = await supabase.from('groups').select('id').eq('name', 'General').single();
                     const allGroups = generalGroup ? [...groupIds, generalGroup.id] : groupIds;
 
-                    // Show news that are either public OR in my groups
-                    query = query.or(`is_public.eq.true,group_id.in.(${allGroups.length > 0 ? allGroups.join(',') : '00000000-0000-0000-0000-000000000000'})`);
+                    query = query.eq('is_published', true).or(`is_public.eq.true,group_id.in.(${allGroups.length > 0 ? allGroups.join(',') : '00000000-0000-0000-0000-000000000000'})`);
+                } else {
+                    // Admin/Author see everything they wrote + what's published
+                    // We handle filters locally or in query if possible
+                    if (filter === 'visible') query = query.eq('is_published', true);
+                    else if (filter === 'hidden') query = query.eq('is_published', false);
                 }
-                // Admins see everything
             }
 
             const { data, error } = await query;
             if (error) throw error;
-            setPosts(data || []);
+
+            // Fetch likes and reads
+            const postsWithInteractions = await Promise.all((data || []).map(async (p) => {
+                const { count: likesCount } = await supabase.from('post_likes').select('*', { count: 'exact', head: true }).eq('post_id', p.id);
+                let isLiked = false;
+                if (userProfile) {
+                    const { data: myLike } = await supabase.from('post_likes').select('*').eq('post_id', p.id).eq('user_id', userProfile.id).single();
+                    isLiked = !!myLike;
+                }
+                return { ...p, likesCount, isLiked };
+            }));
+
+            setPosts(postsWithInteractions);
 
             if (userProfile) {
                 const { data: reads } = await supabase.from('post_reads').select('post_id').eq('user_id', userProfile.id);
@@ -168,7 +246,7 @@ export default function NewsFeed({ userProfile, onlyPublic = false }: { userProf
         }
     };
 
-    useEffect(() => { fetchFeed(); }, [userProfile?.id, onlyPublic]);
+    useEffect(() => { fetchFeed(); }, [userProfile?.id, onlyPublic, filter]);
 
     const handleConfirmRead = async (postId: string) => {
         if (!userProfile) return;
@@ -182,46 +260,31 @@ export default function NewsFeed({ userProfile, onlyPublic = false }: { userProf
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {isAdmin && !onlyPublic && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <select
+                        value={filter}
+                        onChange={(e) => setFilter(e.target.value as NewsFilter)}
+                        style={{ ...inputStyle, width: 'auto', padding: '0.4rem 1rem', fontSize: '0.85rem' }}
+                    >
+                        <option value="visible">Mostrar: Visibles</option>
+                        <option value="hidden">Mostrar: Ocultas</option>
+                        <option value="all">Mostrar: Todas</option>
+                    </select>
+                </div>
+            )}
+
             {posts.length === 0 ? (
                 <div className="glass-card" style={{ padding: '3rem', textAlign: 'center', borderStyle: 'dashed' }}>
                     <p style={{ color: 'var(--text-muted)' }}>No hay noticias disponibles por el momento.</p>
                 </div>
             ) : posts.map(post => {
-                const mediaItems = post.media || (post.multimedia_url ? [{ url: post.multimedia_url, type: post.multimedia_url.match(/\.(mp4|webm|ogg|mov)$/i) ? 'video' : 'image' }] : []);
-
                 if (isAdmin) {
                     return <PostCard key={post.id} post={post} userProfile={userProfile} onRefresh={fetchFeed} />;
                 }
 
                 return (
-                    <article key={post.id} className="glass-card" style={{ padding: '2rem', borderLeft: (userProfile && !readPosts.includes(post.id)) ? '4px solid var(--accent)' : 'none' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div>
-                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                    {post.is_public && <span style={{ ...badgeStyle, background: '#dbeafe', color: '#1e40af' }}>🌍 PÚBLICA</span>}
-                                    <span style={badgeStyle}>{post.group?.name || 'General'}</span>
-                                </div>
-                                <h3 style={{ marginTop: '0.5rem', color: 'var(--primary)' }}>{post.title}</h3>
-                            </div>
-                            <time style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{new Date(post.created_at).toLocaleDateString()}</time>
-                        </div>
-                        <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#4a5568', margin: '1rem 0 1.5rem' }}>{post.content}</p>
-
-                        <MediaCarousel media={mediaItems} />
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #edf2f7', paddingTop: '1rem', marginTop: '1rem' }}>
-                            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Por: <strong>{post.author?.first_name} {post.author?.last_name}</strong></span>
-                            {userProfile && (
-                                readPosts.includes(post.id) ? (
-                                    <span style={{ color: 'var(--success)', fontWeight: 600 }}>✓ Enterado</span>
-                                ) : (
-                                    <button onClick={() => handleConfirmRead(post.id)} className="btn-primary" style={{ padding: '0.5rem 1.25rem', fontSize: '0.85rem' }}>
-                                        Marcar como Enterado
-                                    </button>
-                                )
-                            )}
-                        </div>
-                    </article>
+                    <PostCard key={post.id} post={post} userProfile={userProfile} onRefresh={fetchFeed} />
                 );
             })}
         </div>
