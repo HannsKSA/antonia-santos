@@ -99,7 +99,7 @@ INSERT INTO groups (name) VALUES
 ('Grado 1-2')
 ON CONFLICT (name) DO NOTHING;
 
--- 8. POLÍTICAS DE SEGURIDAD (RLS)
+-- 8. POLÍTICAS DE SEGURIDAD (RLS) - Grupos y Perfiles
 ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public groups are viewable by everyone" ON groups;
 CREATE POLICY "Public groups are viewable by everyone" ON groups FOR SELECT USING (true);
@@ -113,26 +113,8 @@ CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.
 ALTER TABLE user_groups ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can see their own group memberships" ON user_groups;
 CREATE POLICY "Users can see their own group memberships" ON user_groups FOR SELECT USING (auth.uid() = user_id);
--- Permite que un usuario recién registrado se asocie a sus propios grupos
 DROP POLICY IF EXISTS "Users can insert their own group memberships" ON user_groups;
 CREATE POLICY "Users can insert their own group memberships" ON user_groups FOR INSERT WITH CHECK (auth.uid() = user_id);
-
-ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public posts are viewable by everyone" ON posts;
-CREATE POLICY "Public posts are viewable by everyone" ON posts FOR SELECT USING (is_published = true);
-DROP POLICY IF EXISTS "Authors and admins can manage posts" ON posts;
-CREATE POLICY "Authors and admins can manage posts" ON posts FOR ALL USING (
-  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
-);
-
-ALTER TABLE post_reads ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Users can insert their own reads" ON post_reads;
-CREATE POLICY "Users can insert their own reads" ON post_reads FOR INSERT WITH CHECK (auth.uid() = user_id);
-DROP POLICY IF EXISTS "Authors can view reads of their posts" ON post_reads;
-CREATE POLICY "Authors can view reads of their posts" ON post_reads FOR SELECT USING (
-  EXISTS (SELECT 1 FROM posts WHERE posts.id = post_id AND posts.author_id = auth.uid()) OR 
-  EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'super_admin')
-);
 
 -- 10. TABLA DE COMENTARIOS (Para el refinamiento de propuestas)
 CREATE TABLE IF NOT EXISTS comments (
@@ -162,63 +144,58 @@ CREATE TABLE IF NOT EXISTS reports (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 13. POLÍTICAS RLS ACTUALIZADAS (Idempotentes - se pueden ejecutar múltiples veces)
+-- 13. POLÍTICAS RLS ACTUALIZADAS (Idempotentes)
 
--- POSTS: Moderación por roles
+-- POSTS
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authors and admins can manage posts" ON posts;
 DROP POLICY IF EXISTS "Public posts are viewable by everyone" ON posts;
+CREATE POLICY "Public posts are viewable by everyone" ON posts FOR SELECT USING (is_published = true);
+
 DROP POLICY IF EXISTS "Super Admins have full control over posts" ON posts;
-DROP POLICY IF EXISTS "Admins and Teachers can edit or hide posts" ON posts;
-
-CREATE POLICY "Public posts are viewable by everyone" ON posts 
-FOR SELECT USING (is_published = true);
-
-CREATE POLICY "Super Admins have full control over posts" ON posts 
-FOR ALL USING (
+CREATE POLICY "Super Admins have full control over posts" ON posts FOR ALL USING (
   auth.uid() IN (SELECT id FROM profiles WHERE role = 'super_admin')
 );
 
 DROP POLICY IF EXISTS "Admins and Teachers can edit or hide posts" ON posts;
-CREATE POLICY "Admins and Teachers can edit or hide posts" ON posts 
-FOR UPDATE USING (
+CREATE POLICY "Admins and Teachers can edit or hide posts" ON posts FOR UPDATE USING (
   auth.uid() IN (SELECT id FROM profiles WHERE role IN ('admin', 'teacher'))
 );
 
 DROP POLICY IF EXISTS "Authors can create posts" ON posts;
-CREATE POLICY "Authors can create posts" ON posts 
-FOR INSERT WITH CHECK (
+CREATE POLICY "Authors can create posts" ON posts FOR INSERT WITH CHECK (
   auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
 );
 
--- COMENTARIOS: Moderación por roles
+-- COMENTARIOS
 ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Comments are viewable by everyone" ON comments;
-DROP POLICY IF EXISTS "Users can comment on posts" ON comments;
-DROP POLICY IF EXISTS "Users can edit their own comments" ON comments;
-DROP POLICY IF EXISTS "Super Admins can delete or hide comments" ON comments;
-DROP POLICY IF EXISTS "Admins can hide comments" ON comments;
-
 CREATE POLICY "Comments are viewable by everyone" ON comments FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users can insert comments" ON comments;
 CREATE POLICY "Users can insert comments" ON comments FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can edit their own comments" ON comments;
 CREATE POLICY "Users can edit their own comments" ON comments FOR UPDATE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Super Admins can delete or hide comments" ON comments;
 CREATE POLICY "Super Admins can delete or hide comments" ON comments FOR ALL USING (
   auth.uid() IN (SELECT id FROM profiles WHERE role = 'super_admin')
 );
 
+DROP POLICY IF EXISTS "Admins can hide comments" ON comments;
 CREATE POLICY "Admins can hide comments" ON comments FOR UPDATE USING (
   auth.uid() IN (SELECT id FROM profiles WHERE role IN ('admin', 'teacher'))
 );
 
--- VOTOS
+-- VOTOS (Propuestas)
 ALTER TABLE proposal_votes ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Votes are viewable by everyone" ON proposal_votes;
-DROP POLICY IF EXISTS "Users can vote once per post" ON proposal_votes;
-DROP POLICY IF EXISTS "Users can update their vote" ON proposal_votes;
-
 CREATE POLICY "Votes are viewable by everyone" ON proposal_votes FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users can vote once per post" ON proposal_votes;
 CREATE POLICY "Users can vote once per post" ON proposal_votes FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update their vote" ON proposal_votes;
 CREATE POLICY "Users can update their vote" ON proposal_votes FOR UPDATE USING (auth.uid() = user_id);
 
 -- 14. TABLA DE OPCIONES DE ENCUESTA
@@ -249,20 +226,30 @@ CREATE POLICY "Users can vote in polls" ON votes FOR INSERT WITH CHECK (auth.uid
 DROP POLICY IF EXISTS "Users can change their poll vote" ON votes;
 CREATE POLICY "Users can change their poll vote" ON votes FOR UPDATE USING (auth.uid() = user_id);
 
--- 16. REPORTES: Solo admins ven, cualquier usuario puede crear
+-- 16. REPORTES
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can create reports" ON reports;
-DROP POLICY IF EXISTS "Only admins can view reports" ON reports;
-
 CREATE POLICY "Users can create reports" ON reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
+DROP POLICY IF EXISTS "Only admins can view reports" ON reports;
 CREATE POLICY "Only admins can view reports" ON reports FOR SELECT USING (
   auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
 );
+DROP POLICY IF EXISTS "Admins can update report status" ON reports;
 CREATE POLICY "Admins can update report status" ON reports FOR UPDATE USING (
   auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin'))
 );
 
--- 14. TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE
+-- 17. POST_READS
+ALTER TABLE post_reads ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can insert their own reads" ON post_reads;
+CREATE POLICY "Users can insert their own reads" ON post_reads FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Authors can view reads of their posts" ON post_reads;
+CREATE POLICY "Authors can view reads of their posts" ON post_reads FOR SELECT USING (
+  EXISTS (SELECT 1 FROM posts WHERE posts.id = post_id AND posts.author_id = auth.uid()) OR 
+  EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'super_admin')
+);
+
+-- 18. TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -277,46 +264,42 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
--- ==========================================
--- 15. SISTEMA DE NOTIFICACIONES IN-APP
--- ==========================================
-
+-- 19. SISTEMA DE NOTIFICACIONES IN-APP
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,  -- destinatario
-  actor_id UUID REFERENCES profiles(id) ON DELETE SET NULL, -- quien generó la acción
-  type TEXT NOT NULL CHECK (type IN (
-    'new_post',       -- nueva noticia en mi grupo
-    'new_proposal',   -- nueva propuesta en mi grupo
-    'new_comment',    -- comentario en una propuesta mía
-    'approved',       -- mi cuenta fue aprobada
-    'rejected',       -- mi cuenta fue rechazada
-    'vote_milestone'  -- la propuesta alcanzó 5 votos
-  )),
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  actor_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  type TEXT NOT NULL,
   title TEXT NOT NULL,
   body TEXT,
-  link TEXT,         -- ruta a donde navegar
+  link TEXT,
   is_read BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users see their own notifications" ON notifications;
+CREATE POLICY "Users see their own notifications" ON notifications FOR SELECT USING (auth.uid() = user_id);
 DROP POLICY IF EXISTS "System can insert notifications" ON notifications;
+CREATE POLICY "System can insert notifications" ON notifications FOR INSERT WITH CHECK (true);
 DROP POLICY IF EXISTS "Users can mark notifications as read" ON notifications;
+CREATE POLICY "Users can mark notifications as read" ON notifications FOR UPDATE USING (auth.uid() = user_id);
 
-CREATE POLICY "Users see their own notifications" ON notifications
-  FOR SELECT USING (auth.uid() = user_id);
+-- 20. FUNCIÓN: Actualizar updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
 
-CREATE POLICY "System can insert notifications" ON notifications
-  FOR INSERT WITH CHECK (true);
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON profiles;
+CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+DROP TRIGGER IF EXISTS update_posts_updated_at ON posts;
+CREATE TRIGGER update_posts_updated_at BEFORE UPDATE ON posts FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
-CREATE POLICY "Users can mark notifications as read" ON notifications
-  FOR UPDATE USING (auth.uid() = user_id);
-
--- ==========================================
--- 16. FUNCIÓN: Notificar a miembros del grupo cuando se publica un post
--- ==========================================
+-- 21. TRÍGGERS DE NOTIFICACIÓN
 CREATE OR REPLACE FUNCTION public.notify_group_on_new_post()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -324,69 +307,42 @@ DECLARE
   post_type TEXT;
   notif_title TEXT;
 BEGIN
-  -- Solo notificar si el post se publica directamente
   IF NEW.is_published = TRUE THEN
     IF NEW.type = 'news' THEN
       notif_title := '📰 Nueva noticia: ' || NEW.title;
       post_type := 'new_post';
-    ELSE
+    ELSIF NEW.type = 'proposal' THEN
       notif_title := '💡 Nueva propuesta: ' || NEW.title;
       post_type := 'new_proposal';
+    ELSE
+      notif_title := '📊 Nueva encuesta: ' || NEW.title;
+      post_type := 'new_post';
     END IF;
 
-    -- Insertar notificación para cada miembro del grupo destino
-    FOR member IN
-      SELECT ug.user_id FROM user_groups ug WHERE ug.group_id = NEW.group_id
-    LOOP
-      -- No notificar al propio autor
+    FOR member IN SELECT ug.user_id FROM user_groups ug WHERE ug.group_id = NEW.group_id LOOP
       IF member.user_id != NEW.author_id THEN
         INSERT INTO notifications (user_id, actor_id, type, title, body, link)
-        VALUES (
-          member.user_id,
-          NEW.author_id,
-          post_type,
-          notif_title,
-          LEFT(NEW.content, 120),
-          '/dashboard'
-        );
+        VALUES (member.user_id, NEW.author_id, post_type, notif_title, LEFT(NEW.content, 120), '/dashboard');
       END IF;
     END LOOP;
   END IF;
-
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 DROP TRIGGER IF EXISTS on_post_published ON posts;
-CREATE TRIGGER on_post_published
-  AFTER INSERT ON posts
-  FOR EACH ROW EXECUTE PROCEDURE public.notify_group_on_new_post();
+CREATE TRIGGER on_post_published AFTER INSERT ON posts FOR EACH ROW EXECUTE PROCEDURE public.notify_group_on_new_post();
 
--- ==========================================
--- 17. FUNCIÓN: Notificar al usuario cuando su cuenta es aprobada/rechazada
--- ==========================================
 CREATE OR REPLACE FUNCTION public.notify_on_status_change()
 RETURNS TRIGGER AS $$
 BEGIN
   IF OLD.status != NEW.status THEN
     IF NEW.status = 'approved' THEN
       INSERT INTO notifications (user_id, type, title, body, link)
-      VALUES (
-        NEW.id,
-        'approved',
-        '✅ ¡Tu cuenta fue aprobada!',
-        'Ya puedes ver las noticias y propuestas de tus grupos.',
-        '/dashboard'
-      );
+      VALUES (NEW.id, 'approved', '✅ ¡Tu cuenta fue aprobada!', 'Ya puedes ver las noticias y propuestas de tus grupos.', '/dashboard');
     ELSIF NEW.status = 'rejected' THEN
       INSERT INTO notifications (user_id, type, title, body, link)
-      VALUES (
-        NEW.id,
-        'rejected',
-        '❌ Tu solicitud no fue aprobada',
-        'Contacta a tu docente para más información.',
-        '/'
-      );
+      VALUES (NEW.id, 'rejected', '❌ Tu solicitud no fue aprobada', 'Contacta a tu docente para más información.', '/');
     END IF;
   END IF;
   RETURN NEW;
@@ -394,6 +350,4 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 DROP TRIGGER IF EXISTS on_profile_status_changed ON profiles;
-CREATE TRIGGER on_profile_status_changed
-  AFTER UPDATE OF status ON profiles
-  FOR EACH ROW EXECUTE PROCEDURE public.notify_on_status_change();
+CREATE TRIGGER on_profile_status_changed AFTER UPDATE OF status ON profiles FOR EACH ROW EXECUTE PROCEDURE public.notify_on_status_change();
