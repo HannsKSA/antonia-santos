@@ -131,6 +131,10 @@ CREATE POLICY "Admins can update profile status" ON profiles FOR UPDATE USING (
 ALTER TABLE user_groups ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can see their own group memberships" ON user_groups;
 CREATE POLICY "Users can see their own group memberships" ON user_groups FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Admins can see all group memberships" ON user_groups;
+CREATE POLICY "Admins can see all group memberships" ON user_groups FOR SELECT USING (
+  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
+);
 DROP POLICY IF EXISTS "Users can insert their own group memberships" ON user_groups;
 CREATE POLICY "Users can insert their own group memberships" ON user_groups FOR INSERT WITH CHECK (auth.uid() = user_id);
 

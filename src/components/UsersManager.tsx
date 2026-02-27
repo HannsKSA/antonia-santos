@@ -5,33 +5,88 @@ import { supabase } from '@/lib/supabase';
 
 export default function UsersManager({ userProfile }: { userProfile: any }) {
     const [users, setUsers] = useState<any[]>([]);
+    const [groups, setGroups] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
 
-    const fetchUsers = async () => {
+    // Edit Modal State
+    const [editingUser, setEditingUser] = useState<any>(null);
+    const [editForm, setEditForm] = useState({
+        first_name: '',
+        last_name: '',
+        username: '',
+        role: '',
+        status: '',
+        password: '',
+        groupIds: [] as string[]
+    });
+    const [updating, setUpdating] = useState(false);
+
+    const fetchData = async () => {
         setLoading(true);
-        const { data } = await supabase
+        // Fetch Users
+        const { data: usersData } = await supabase
             .from('profiles')
-            .select('*')
+            .select('*, user_groups(group_id)')
             .order('last_name', { ascending: true });
-        if (data) setUsers(data);
+
+        // Fetch Groups
+        const { data: groupsData } = await supabase.from('groups').select('*').order('name');
+
+        if (usersData) setUsers(usersData);
+        if (groupsData) setGroups(groupsData);
         setLoading(false);
     };
 
     useEffect(() => {
-        fetchUsers();
+        fetchData();
     }, []);
 
-    const handleRoleChange = async (userId: string, newRole: string) => {
-        const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
-        if (error) alert(error.message);
-        else fetchUsers();
+    const handleEditOpen = (user: any) => {
+        setEditingUser(user);
+        setEditForm({
+            first_name: user.first_name || '',
+            last_name: user.last_name || '',
+            username: user.username || '',
+            role: user.role || '',
+            status: user.status || '',
+            password: '',
+            groupIds: user.user_groups?.map((ug: any) => ug.group_id) || []
+        });
     };
 
-    const handleStatusChange = async (userId: string, newStatus: string) => {
-        const { error } = await supabase.from('profiles').update({ status: newStatus }).eq('id', userId);
-        if (error) alert(error.message);
-        else fetchUsers();
+    const handleEditSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setUpdating(true);
+        try {
+            const res = await fetch('/api/admin/user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: editingUser.id, ...editForm })
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                alert('Usuario actualizado');
+                setEditingUser(null);
+                fetchData();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (err: any) {
+            alert('Error de red');
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const toggleGroup = (groupId: string) => {
+        setEditForm(prev => ({
+            ...prev,
+            groupIds: prev.groupIds.includes(groupId)
+                ? prev.groupIds.filter(id => id !== groupId)
+                : [...prev.groupIds, groupId]
+        }));
     };
 
     const filteredUsers = users.filter(u =>
@@ -41,7 +96,7 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
     return (
         <div className="glass-card" style={{ padding: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                <h3 style={{ color: 'var(--primary)' }}>👥 Gestión de Usuarios</h3>
+                <h3 style={{ color: 'var(--primary)' }}>👥 Gestión Total de Usuarios</h3>
                 <input
                     type="text"
                     placeholder="Buscar usuario..."
@@ -51,14 +106,14 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
                 />
             </div>
 
-            {loading ? <p>Cargando usuarios...</p> : (
+            {loading ? <p>Cargando información...</p> : (
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                         <thead>
                             <tr style={{ textAlign: 'left', borderBottom: '2px solid #edf2f7' }}>
-                                <th style={{ padding: '1rem' }}>Nombre</th>
-                                <th style={{ padding: '1rem' }}>Rol</th>
-                                <th style={{ padding: '1rem' }}>Estado</th>
+                                <th style={{ padding: '1rem' }}>Usuario / Nombre</th>
+                                <th style={{ padding: '1rem' }}>Rol / Estado</th>
+                                <th style={{ padding: '1rem' }}>Grados/Grupos</th>
                                 <th style={{ padding: '1rem' }}>Acciones</th>
                             </tr>
                         </thead>
@@ -67,43 +122,32 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
                                 <tr key={u.id} style={{ borderBottom: '1px solid #edf2f7' }}>
                                     <td style={{ padding: '1rem' }}>
                                         <div style={{ fontWeight: 600 }}>{u.first_name} {u.last_name}</div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{u.username || 'Sin username'}</div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>@{u.username || 'sin_user'}</div>
                                     </td>
                                     <td style={{ padding: '1rem' }}>
-                                        <select
-                                            value={u.role}
-                                            onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                                            style={selectStyle}
-                                            disabled={u.id === userProfile.id && u.role === 'super_admin'}
-                                        >
-                                            <option value="super_admin">Super Admin</option>
-                                            <option value="admin">Administrador</option>
-                                            <option value="teacher">Docente</option>
-                                            <option value="user">Usuario</option>
-                                        </select>
+                                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}>{u.role.toUpperCase()}</div>
+                                        <div style={{
+                                            fontSize: '0.75rem',
+                                            color: u.status === 'approved' ? 'var(--success)' : u.status === 'pending' ? '#d97706' : 'var(--error)'
+                                        }}>
+                                            ● {u.status}
+                                        </div>
                                     </td>
                                     <td style={{ padding: '1rem' }}>
-                                        <select
-                                            value={u.status}
-                                            onChange={(e) => handleStatusChange(u.id, e.target.value)}
-                                            style={{
-                                                ...selectStyle,
-                                                color: u.status === 'approved' ? 'var(--success)' : u.status === 'pending' ? '#d97706' : 'var(--error)',
-                                                fontWeight: 700
-                                            }}
-                                        >
-                                            <option value="approved">Aprobado</option>
-                                            <option value="pending">Pendiente</option>
-                                            <option value="rejected">Rechazado</option>
-                                        </select>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                            {u.user_groups?.length > 0 ? u.user_groups.map((ug: any) => {
+                                                const g = groups.find(grp => grp.id === ug.group_id);
+                                                return g ? <span key={g.id} style={badgeStyle}>{g.name}</span> : null;
+                                            }) : <span style={{ color: '#ccc', fontSize: '0.75rem' }}>Estandar</span>}
+                                        </div>
                                     </td>
                                     <td style={{ padding: '1rem' }}>
                                         <button
-                                            onClick={() => { if (confirm('¿Eliminar este usuario?')) alert('Función no implementada por seguridad. Use "Rechazado" para quitar acceso.'); }}
-                                            style={{ color: 'var(--error)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}
-                                            title="Eliminar"
+                                            onClick={() => handleEditOpen(u)}
+                                            style={{ color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '0.5rem' }}
+                                            title="Editar Usuario"
                                         >
-                                            🗑️
+                                            ✏️
                                         </button>
                                     </td>
                                 </tr>
@@ -112,16 +156,146 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
                     </table>
                 </div>
             )}
+
+            {/* Edit Modal */}
+            {editingUser && (
+                <div style={modalOverlayStyle}>
+                    <div className="glass-card" style={modalContentStyle}>
+                        <h3 style={{ marginBottom: '1.5rem', color: 'var(--primary)' }}>Editar Usuario: {editingUser.email}</h3>
+
+                        <form onSubmit={handleEditSave} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div>
+                                    <label style={labelStyle}>Nombres</label>
+                                    <input type="text" value={editForm.first_name} onChange={e => setEditForm({ ...editForm, first_name: e.target.value })} style={inputStyle} />
+                                </div>
+                                <div>
+                                    <label style={labelStyle}>Apellidos</label>
+                                    <input type="text" value={editForm.last_name} onChange={e => setEditForm({ ...editForm, last_name: e.target.value })} style={inputStyle} />
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div>
+                                    <label style={labelStyle}>Username</label>
+                                    <input type="text" value={editForm.username} onChange={e => setEditForm({ ...editForm, username: e.target.value })} style={inputStyle} />
+                                </div>
+                                <div>
+                                    <label style={labelStyle}>Nueva Clave (opcional)</label>
+                                    <input type="password" placeholder="Solo si desea cambiarla" onChange={e => setEditForm({ ...editForm, password: e.target.value })} style={inputStyle} />
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div>
+                                    <label style={labelStyle}>Rol</label>
+                                    <select value={editForm.role} onChange={e => setEditForm({ ...editForm, role: e.target.value })} style={inputStyle}>
+                                        <option value="user">Usuario</option>
+                                        <option value="teacher">Docente</option>
+                                        <option value="admin">Administrador</option>
+                                        <option value="super_admin">Super Admin</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style={labelStyle}>Estado</label>
+                                    <select value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value })} style={inputStyle}>
+                                        <option value="approved">Aprobado</option>
+                                        <option value="pending">Pendiente</option>
+                                        <option value="rejected">Rechazado</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label style={labelStyle}>Asignar Grados / Grupos</label>
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                                    gap: '0.5rem',
+                                    maxHeight: '150px',
+                                    overflowY: 'auto',
+                                    padding: '1rem',
+                                    background: '#f8fafc',
+                                    borderRadius: '8px',
+                                    border: '1px solid #e2e8f0'
+                                }}>
+                                    {groups.map(g => (
+                                        <label key={g.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={editForm.groupIds.includes(g.id)}
+                                                onChange={() => toggleGroup(g.id)}
+                                            />
+                                            {g.name}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                                <button type="button" onClick={() => setEditingUser(null)} style={{ ...btnStyle, background: '#cbd5e1', color: '#1e293b' }}>Cancelar</button>
+                                <button type="submit" disabled={updating} style={btnStyle}>{updating ? 'Guardando...' : 'Guardar Cambios'}</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
-const selectStyle = {
-    padding: '0.4rem',
-    borderRadius: '6px',
+const badgeStyle: React.CSSProperties = {
+    background: '#ebf4ff',
+    color: '#3182ce',
+    padding: '2px 8px',
+    borderRadius: '12px',
+    fontSize: '0.7rem',
+    fontWeight: 600
+};
+
+const modalOverlayStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: 0, left: 0, right: 0, bottom: 0,
+    background: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    padding: '1rem'
+};
+
+const modalContentStyle: React.CSSProperties = {
+    width: '100%',
+    maxWidth: '600px',
+    maxHeight: '90vh',
+    overflowY: 'auto',
+    padding: '2rem',
+    background: 'white'
+};
+
+const labelStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    marginBottom: '0.3rem',
+    color: 'var(--primary)'
+};
+
+const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '0.6rem',
+    borderRadius: '8px',
     border: '1px solid #e2e8f0',
-    background: 'white',
-    fontSize: '0.85rem',
-    outline: 'none',
+    fontSize: '0.85rem'
+};
+
+const btnStyle: React.CSSProperties = {
+    flex: 1,
+    padding: '0.75rem',
+    borderRadius: '8px',
+    border: 'none',
+    background: 'var(--primary)',
+    color: 'white',
+    fontWeight: 600,
     cursor: 'pointer'
 };
