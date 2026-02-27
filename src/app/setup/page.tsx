@@ -1,10 +1,48 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
 export default function SetupPage() {
-    const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error' | 'checking'>('checking');
     const [message, setMessage] = useState('');
+    const router = useRouter();
+
+    useEffect(() => {
+        async function checkSecurity() {
+            // Ver si hay un super_admin
+            const { data: superAdmins } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('role', 'super_admin');
+
+            const hasSuperAdmin = superAdmins && superAdmins.length > 0;
+
+            if (hasSuperAdmin) {
+                // Si existe, ver si yo soy ese super_admin
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) {
+                    router.push('/login');
+                    return;
+                }
+
+                const { data: myProfile } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', user.id)
+                    .single();
+
+                if (myProfile?.role !== 'super_admin') {
+                    alert('Acceso restringido: El sistema ya ha sido configurado.');
+                    router.push('/');
+                    return;
+                }
+            }
+            setStatus('idle');
+        }
+        checkSecurity();
+    }, []);
 
     const handleSetup = async () => {
         setStatus('loading');
@@ -32,6 +70,8 @@ export default function SetupPage() {
                 <p style={{ marginBottom: '2rem', opacity: 0.8 }}>
                     Este proceso creará el Super Administrador y los grupos base definidos en tus variables de entorno.
                 </p>
+
+                {status === 'checking' && <p>Verificando permisos de seguridad...</p>}
 
                 {status === 'idle' && (
                     <button onClick={handleSetup} className="btn-accent" style={{ padding: '1rem 2rem' }}>

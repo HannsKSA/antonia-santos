@@ -10,10 +10,12 @@ import ProposalFeed from '@/components/ProposalFeed';
 import CreatePoll from '@/components/CreatePoll';
 import PollFeed from '@/components/PollFeed';
 import ReportsPanel from '@/components/ReportsPanel';
+import UsersManager from '@/components/UsersManager';
+import GroupsManager from '@/components/GroupsManager';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'feed' | 'proposals' | 'polls' | 'approvals' | 'create' | 'metrics';
+type Tab = 'feed' | 'proposals' | 'polls' | 'approvals' | 'create' | 'metrics' | 'users_admin' | 'groups_admin';
 
 export default function DashboardPage() {
     const [profile, setProfile] = useState<any>(null);
@@ -120,11 +122,14 @@ export default function DashboardPage() {
                 )}
 
                 {isAdmin && (
-                    <TabButton
-                        active={activeTab === 'approvals'}
-                        onClick={() => setActiveTab('approvals')}
-                        label={`🔔 Solicitudes (${pendingUsers.length})`}
-                    />
+                    <TabButton active={activeTab === 'approvals'} onClick={() => setActiveTab('approvals')} label={`🔔 Solicitudes (${pendingUsers.length})`} />
+                )}
+
+                {profile?.role === 'super_admin' && (
+                    <>
+                        <TabButton active={activeTab === 'users_admin'} onClick={() => setActiveTab('users_admin')} label="👥 Usuarios" />
+                        <TabButton active={activeTab === 'groups_admin'} onClick={() => setActiveTab('groups_admin')} label="🏗️ Grupos" />
+                    </>
                 )}
             </nav>
 
@@ -188,6 +193,14 @@ export default function DashboardPage() {
                             )}
                         </div>
                     </section>
+                )}
+
+                {activeTab === 'users_admin' && profile?.role === 'super_admin' && (
+                    <UsersManager userProfile={profile} />
+                )}
+
+                {activeTab === 'groups_admin' && profile?.role === 'super_admin' && (
+                    <GroupsManager />
                 )}
             </main>
         </div>
