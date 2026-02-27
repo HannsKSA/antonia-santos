@@ -219,7 +219,35 @@ CREATE POLICY "Votes are viewable by everyone" ON proposal_votes FOR SELECT USIN
 CREATE POLICY "Users can vote once per post" ON proposal_votes FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update their vote" ON proposal_votes FOR UPDATE USING (auth.uid() = user_id);
 
--- REPORTES: Solo admins ven, cualquier usuario puede crear
+-- 14. TABLA DE OPCIONES DE ENCUESTA
+CREATE TABLE IF NOT EXISTS poll_options (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+  option_text TEXT NOT NULL
+);
+
+ALTER TABLE poll_options ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Poll options are viewable by everyone" ON poll_options;
+CREATE POLICY "Poll options are viewable by everyone" ON poll_options FOR SELECT USING (true);
+
+-- 15. TABLA DE VOTOS (Encuestas)
+CREATE TABLE IF NOT EXISTS votes (
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+  option_id UUID REFERENCES poll_options(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (user_id, post_id)
+);
+
+ALTER TABLE votes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Votes are viewable by everyone" ON votes;
+CREATE POLICY "Votes are viewable by everyone" ON votes FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Users can vote in polls" ON votes;
+CREATE POLICY "Users can vote in polls" ON votes FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can change their poll vote" ON votes;
+CREATE POLICY "Users can change their poll vote" ON votes FOR UPDATE USING (auth.uid() = user_id);
+
+-- 16. REPORTES: Solo admins ven, cualquier usuario puede crear
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can create reports" ON reports;
 DROP POLICY IF EXISTS "Only admins can view reports" ON reports;
