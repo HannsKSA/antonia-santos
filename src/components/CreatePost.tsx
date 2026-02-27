@@ -9,7 +9,8 @@ export default function CreatePost({ userProfile, onPostCreated }: { userProfile
     const [groupId, setGroupId] = useState('');
     const [groups, setGroups] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
-    const [multimediaUrl, setMultimediaUrl] = useState('');
+    const [isPublic, setIsPublic] = useState(false);
+    const [mediaLinks, setMediaLinks] = useState<string[]>(['']);
 
     useEffect(() => {
         async function fetchGroups() {
@@ -22,9 +23,25 @@ export default function CreatePost({ userProfile, onPostCreated }: { userProfile
         fetchGroups();
     }, []);
 
+    const handleAddMedia = () => setMediaLinks([...mediaLinks, '']);
+    const handleMediaChange = (index: number, val: string) => {
+        const updated = [...mediaLinks];
+        updated[index] = val;
+        setMediaLinks(updated);
+    };
+    const handleRemoveMedia = (index: number) => {
+        if (mediaLinks.length > 1) {
+            setMediaLinks(mediaLinks.filter((_, i) => i !== index));
+        } else {
+            setMediaLinks(['']);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
+
+        const validMedia = mediaLinks.filter(link => link.trim() !== '');
 
         try {
             const { error } = await supabase.from('posts').insert({
@@ -32,8 +49,13 @@ export default function CreatePost({ userProfile, onPostCreated }: { userProfile
                 type: 'news',
                 title,
                 content,
-                group_id: groupId,
-                multimedia_url: multimediaUrl,
+                group_id: isPublic ? null : groupId,
+                is_public: isPublic,
+                media: validMedia.map(url => ({
+                    url,
+                    type: url.match(/\.(mp4|webm|ogg|mov)$/i) ? 'video' : 'image'
+                })),
+                multimedia_url: validMedia[0] || '', // Compatible with old code
                 is_published: true
             });
 
@@ -41,7 +63,8 @@ export default function CreatePost({ userProfile, onPostCreated }: { userProfile
 
             setTitle('');
             setContent('');
-            setMultimediaUrl('');
+            setMediaLinks(['']);
+            setIsPublic(false);
             alert('Noticia publicada con éxito');
             onPostCreated();
         } catch (error: any) {
@@ -78,36 +101,70 @@ export default function CreatePost({ userProfile, onPostCreated }: { userProfile
                     />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'end' }}>
                     <div className="form-group">
                         <label style={labelStyle}>Grado / Grupo Destino</label>
                         <select
                             value={groupId}
                             onChange={e => setGroupId(e.target.value)}
                             style={inputStyle}
+                            disabled={isPublic}
                         >
                             {groups.map(g => (
                                 <option key={g.id} value={g.id}>{g.name}</option>
                             ))}
                         </select>
                     </div>
-                    <div className="form-group">
-                        <label style={labelStyle}>Link Multimedia (Opcional)</label>
+                    <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingBottom: '0.75rem' }}>
                         <input
-                            type="text"
-                            value={multimediaUrl}
-                            onChange={e => setMultimediaUrl(e.target.value)}
-                            style={inputStyle}
-                            placeholder="Drive, YouTube, etc."
+                            type="checkbox"
+                            id="isPublic"
+                            checked={isPublic}
+                            onChange={e => setIsPublic(e.target.checked)}
+                            style={{ width: '1.2rem', height: '1.2rem' }}
                         />
+                        <label htmlFor="isPublic" style={{ ...labelStyle, marginBottom: 0, cursor: 'pointer' }}>
+                            🌍 Hacer noticia pública (Visible sin login)
+                        </label>
                     </div>
+                </div>
+
+                <div className="form-group">
+                    <label style={labelStyle}>Multimedia (Imágenes o Videos)</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {mediaLinks.map((link, idx) => (
+                            <div key={idx} style={{ display: 'flex', gap: '0.5rem' }}>
+                                <input
+                                    type="text"
+                                    value={link}
+                                    onChange={e => handleMediaChange(idx, e.target.value)}
+                                    style={{ ...inputStyle, flex: 1 }}
+                                    placeholder="URL de imagen o video (mp4, webm, jpg, png...)"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemoveMedia(idx)}
+                                    style={{ background: '#fee2e2', color: 'var(--error)', border: 'none', borderRadius: '4px', padding: '0 0.75rem', cursor: 'pointer' }}
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleAddMedia}
+                        style={{ marginTop: '0.5rem', background: 'transparent', border: '1px dashed var(--primary)', color: 'var(--primary)', padding: '0.3rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}
+                    >
+                        + Agregar otro link
+                    </button>
                 </div>
 
                 <button
                     type="submit"
                     className="btn-primary"
                     disabled={loading}
-                    style={{ marginTop: '0.5rem', width: 'fit-content', padding: '0.75rem 2rem' }}
+                    style={{ marginTop: '1rem', width: 'fit-content', padding: '0.75rem 2.5rem' }}
                 >
                     {loading ? 'Publicando...' : 'Publicar Noticia'}
                 </button>

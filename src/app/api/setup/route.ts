@@ -113,6 +113,8 @@ export async function POST() {
                   author_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
                   type content_type NOT NULL, title TEXT NOT NULL, content TEXT,
                   multimedia_url TEXT, multimedia_kind multimedia_type DEFAULT 'internal',
+                  media JSONB DEFAULT '[]'::jsonb,
+                  is_public BOOLEAN DEFAULT FALSE,
                   group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
                   is_published BOOLEAN DEFAULT FALSE, expires_at TIMESTAMPTZ,
                   is_closed BOOLEAN DEFAULT FALSE,
@@ -209,11 +211,9 @@ export async function POST() {
                 CREATE POLICY "Users can update own profile"
                   ON profiles FOR UPDATE USING (auth.uid() = id);
 
-                -- POSTS
-                ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
                 DROP POLICY IF EXISTS "Public posts are viewable by everyone" ON posts;
                 CREATE POLICY "Public posts are viewable by everyone"
-                  ON posts FOR SELECT USING (is_published = true);
+                  ON posts FOR SELECT USING (is_published = true AND (is_public = true OR auth.uid() IS NOT NULL));
                 DROP POLICY IF EXISTS "Super Admins have full control over posts" ON posts;
                 CREATE POLICY "Super Admins have full control over posts"
                   ON posts FOR ALL USING (

@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS posts (
   content TEXT,
   multimedia_url TEXT,
   multimedia_kind multimedia_type DEFAULT 'internal',
+  media JSONB DEFAULT '[]'::jsonb,
+  is_public BOOLEAN DEFAULT FALSE,
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
   is_published BOOLEAN DEFAULT FALSE,
   expires_at TIMESTAMPTZ,

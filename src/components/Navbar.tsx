@@ -61,8 +61,8 @@ export default function Navbar() {
             {/* Desktop Links */}
             <div className="nav-links" style={{ gap: '2rem', fontWeight: 600, color: 'var(--text-muted)' }}>
                 <Link href="/" style={{ color: pathname === '/' ? 'var(--primary)' : 'inherit' }}>Inicio</Link>
-                <Link href="/dashboard" style={{ color: pathname === '/dashboard' ? 'var(--primary)' : 'inherit' }}>Noticias</Link>
-                <Link href="/dashboard" style={{ color: pathname === '/dashboard' ? 'var(--primary)' : 'inherit' }}>Propuestas</Link>
+                <Link href="/noticias" style={{ color: pathname === '/noticias' ? 'var(--primary)' : 'inherit' }}>Noticias</Link>
+                <Link href="/dashboard" style={{ color: pathname === '/dashboard' ? 'var(--primary)' : 'inherit' }}>Panel</Link>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -108,8 +108,8 @@ export default function Navbar() {
                     animation: 'fadeInUp 0.3s ease-out'
                 }}>
                     <Link href="/" style={{ fontWeight: 600, color: pathname === '/' ? 'var(--primary)' : 'var(--text)' }}>Inicio</Link>
-                    <Link href="/dashboard" style={{ fontWeight: 600, color: pathname === '/dashboard' ? 'var(--primary)' : 'var(--text)' }}>Noticias</Link>
-                    <Link href="/dashboard" style={{ fontWeight: 600, color: pathname === '/dashboard' ? 'var(--primary)' : 'var(--text)' }}>Propuestas</Link>
+                    <Link href="/noticias" style={{ fontWeight: 600, color: pathname === '/noticias' ? 'var(--primary)' : 'var(--text)' }}>Noticias</Link>
+                    <Link href="/dashboard" style={{ fontWeight: 600, color: pathname === '/dashboard' ? 'var(--primary)' : 'var(--text)' }}>Panel</Link>
                 </div>
             )}
         </nav>
