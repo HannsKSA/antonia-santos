@@ -13,7 +13,7 @@ export async function POST(req: Request) {
         // 1. Actualizar Perfil
         const { error: profileError } = await supabaseAdmin
             .from('profiles')
-            .update({ email, first_name, last_name, username, role, status })
+            .update({ first_name, last_name, username, role, status })
             .eq('id', userId);
 
         if (profileError) throw profileError;

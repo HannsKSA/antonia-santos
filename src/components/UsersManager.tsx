@@ -25,19 +25,26 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
 
     const fetchData = async () => {
         setLoading(true);
-        // Fetch Users joined with user_groups
-        const { data: usersData, error: uError } = await supabase
-            .from('profiles')
-            .select('*, user_groups(group_id)')
-            .order('last_name', { ascending: true });
+        // Usamos RPC para evitar errores de cache de esquema con la columna email
+        // Esta función hace el JOIN con auth.users de forma segura
+        const { data: usersData, error: uError } = await supabase.rpc('get_users_admin');
 
-        if (uError) console.error("Error fetching users:", uError);
+        if (uError) {
+            console.error("Error fetching users via RPC:", uError);
+            // Fallback por si el RPC falla (aunque no debería)
+            const { data: profilesData } = await supabase
+                .from('profiles')
+                .select('*, user_groups(group_id)')
+                .order('last_name', { ascending: true });
+            if (profilesData) setUsers(profilesData);
+        } else {
+            setUsers(usersData || []);
+        }
 
-        // Fetch Groups
+        // Fetch Groups (solo para el selector)
         const { data: groupsData } = await supabase.from('groups').select('*').order('name');
-
-        if (usersData) setUsers(usersData);
         if (groupsData) setGroups(groupsData);
+
         setLoading(false);
     };
 
@@ -47,6 +54,12 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
 
     const handleEditOpen = (user: any) => {
         setEditingUser(user);
+
+        // Mapear groupIds ya sea del RPC (groups_info) o del fallback (user_groups)
+        const currentGroupIds = user.groups_info
+            ? user.groups_info.map((g: any) => g.group_id)
+            : user.user_groups?.map((ug: any) => ug.group_id) || [];
+
         setEditForm({
             email: user.email || '',
             first_name: user.first_name || '',
@@ -55,7 +68,7 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
             role: user.role || '',
             status: user.status || '',
             password: '',
-            groupIds: user.user_groups?.map((ug: any) => ug.group_id) || []
+            groupIds: currentGroupIds
         });
     };
 
@@ -73,7 +86,7 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
             if (res.ok) {
                 alert('Usuario actualizado correctamente');
                 setEditingUser(null);
-                await fetchData(); // Recargar datos para confirmar cambios
+                await fetchData();
             } else {
                 alert('Error: ' + data.error);
             }
@@ -146,10 +159,16 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
                                     </td>
                                     <td style={{ padding: '1rem' }}>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                            {u.user_groups?.length > 0 ? u.user_groups.map((ug: any) => {
-                                                const g = groups.find(grp => grp.id === ug.group_id);
-                                                return g ? <span key={g.id} style={badgeStyle}>{g.name}</span> : null;
-                                            }) : <span style={{ color: '#ccc', fontSize: '0.75rem' }}>Estandar</span>}
+                                            {u.groups_info ? (
+                                                u.groups_info.length > 0 ? u.groups_info.map((g: any) => (
+                                                    <span key={g.group_id} style={badgeStyle}>{g.name}</span>
+                                                )) : <span style={{ color: '#ccc', fontSize: '0.75rem' }}>Estandar</span>
+                                            ) : (
+                                                u.user_groups?.length > 0 ? u.user_groups.map((ug: any) => {
+                                                    const g = groups.find(grp => grp.id === ug.group_id);
+                                                    return g ? <span key={g.id} style={badgeStyle}>{g.name}</span> : null;
+                                                }) : <span style={{ color: '#ccc', fontSize: '0.75rem' }}>Estandar</span>
+                                            )}
                                         </div>
                                     </td>
                                     <td style={{ padding: '1rem' }}>

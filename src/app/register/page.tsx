@@ -56,7 +56,6 @@ export default function RegisterPage() {
             const { error: profileError } = await supabase
                 .from('profiles')
                 .update({
-                    email,
                     first_name: firstName,
                     last_name: lastName,
                     phone,

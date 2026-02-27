@@ -94,19 +94,58 @@ export async function POST() {
 
                 CREATE TABLE IF NOT EXISTS profiles (
                   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
-                  email TEXT,
                   username TEXT UNIQUE, first_name TEXT, last_name TEXT, phone TEXT,
                   role user_role DEFAULT 'user', sub_role user_sub_role,
                   status user_status DEFAULT 'pending', represented_name TEXT,
                   created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
                 );
 
-                DO $$ 
-                BEGIN 
-                  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='profiles' AND column_name='email') THEN
-                    ALTER TABLE profiles ADD COLUMN email TEXT;
+                -- Función para obtener usuarios con emails reales desde Auth (Solo para Admins)
+                CREATE OR REPLACE FUNCTION get_users_admin()
+                RETURNS TABLE (
+                  id UUID,
+                  email TEXT,
+                  first_name TEXT,
+                  last_name TEXT,
+                  username TEXT,
+                  role TEXT,
+                  status TEXT,
+                  groups_info JSONB
+                ) 
+                SECURITY DEFINER
+                SET search_path = public, auth
+                AS $$
+                BEGIN
+                  -- Verificar si el que llama es admin/super_admin/teacher
+                  IF NOT EXISTS (
+                    SELECT 1 FROM public.profiles 
+                    WHERE profiles.id = auth.uid() 
+                    AND profiles.role IN ('super_admin', 'admin', 'teacher')
+                  ) THEN
+                    RAISE EXCEPTION 'No autorizado';
                   END IF;
-                END $$;
+
+                  RETURN QUERY
+                  SELECT 
+                    au.id,
+                    au.email::TEXT,
+                    p.first_name,
+                    p.last_name,
+                    p.username,
+                    p.role::TEXT,
+                    p.status::TEXT,
+                    COALESCE(
+                      (SELECT jsonb_agg(jsonb_build_object('group_id', ug.group_id, 'name', g.name))
+                       FROM public.user_groups ug
+                       JOIN public.groups g ON g.id = ug.group_id
+                       WHERE ug.user_id = au.id),
+                      '[]'::jsonb
+                    ) as groups_info
+                  FROM auth.users au
+                  LEFT JOIN public.profiles p ON p.id = au.id
+                  ORDER BY p.last_name ASC;
+                END;
+                $$ LANGUAGE plpgsql;
 
                 CREATE TABLE IF NOT EXISTS groups (
                   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -403,19 +442,15 @@ export async function POST() {
     'Perfil super_admin',
     async () => {
       if (!userId) return false;
-      const { data } = await admin.from('profiles').select('role, email').eq('id', userId).single();
-      // Si el rol es super_admin PERO el email es null, forzamos re-ejecución para sincronizarlo
-      return data?.role === 'super_admin' && !!data?.email;
+      const { data } = await admin.from('profiles').select('role').eq('id', userId).single();
+      return data?.role === 'super_admin';
     },
     async () => {
       if (!userId) throw new Error('No se pudo obtener el userId del admin');
       const { error } = await admin.from('profiles').upsert({
         id: userId,
-        email: adminEmail,
-        role: 'super_admin',
-        status: 'approved',
-        first_name: 'Super',
-        last_name: 'Admin'
+        role: 'super_admin', status: 'approved',
+        first_name: 'Super', last_name: 'Admin'
       }, { onConflict: 'id' });
       if (error) throw error;
     }
@@ -444,23 +479,7 @@ export async function POST() {
     }
   ));
 
-  // ─── PASO 8: Sincronizar Emails Existentes ─────────────────────────────────
-  log.push(await step(
-    'Sincronizar Emails',
-    async () => false, // Siempre intentar sincronizar lo que falte
-    async () => {
-      const { data: users } = await admin.auth.admin.listUsers();
-      if (users?.users) {
-        for (const u of users.users) {
-          if (u.email) {
-            await admin.from('profiles').update({ email: u.email }).eq('id', u.id).is('email', null);
-          }
-        }
-      }
-    }
-  ));
-
-  // ─── PASO 9: Refrescar Cache de Esquema ─────────────────────────────────────
+  // ─── PASO 8: Refrescar Cache de Esquema ─────────────────────────────────────
   log.push(await step(
     'Refrescar Cache SQL',
     async () => false,
