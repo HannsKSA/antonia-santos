@@ -202,20 +202,29 @@ export default function NewsFeed({ userProfile, onlyPublic = false }: { userProf
                 query = query.eq('is_public', true).eq('is_published', true);
             } else {
                 const isAdmin = ['super_admin', 'admin', 'teacher'].includes(userProfile.role);
+                const myId = userProfile.id;
 
                 if (!isAdmin) {
-                    // Regular user: can only see published news from their groups or public
-                    const { data: userGroups } = await supabase.from('user_groups').select('group_id').eq('user_id', userProfile.id);
+                    // Regular user: can only see published news from their groups or public + their own hidden/draft
+                    const { data: userGroups } = await supabase.from('user_groups').select('group_id').eq('user_id', myId);
                     const groupIds = userGroups?.map(ug => ug.group_id) || [];
                     const { data: generalGroup } = await supabase.from('groups').select('id').eq('name', 'General').single();
                     const allGroups = generalGroup ? [...groupIds, generalGroup.id] : groupIds;
+                    const groupsFilter = allGroups.length > 0 ? allGroups.join(',') : '00000000-0000-0000-0000-000000000000';
 
-                    query = query.eq('is_published', true).or(`is_public.eq.true,group_id.in.(${allGroups.length > 0 ? allGroups.join(',') : '00000000-0000-0000-0000-000000000000'})`);
+                    query = query.or(`and(is_published.eq.true,or(is_public.eq.true,group_id.in.(${groupsFilter}))),author_id.eq.${myId}`);
                 } else {
-                    // Admin/Author see everything they wrote + what's published
-                    // We handle filters locally or in query if possible
-                    if (filter === 'visible') query = query.eq('is_published', true);
-                    else if (filter === 'hidden') query = query.eq('is_published', false);
+                    // Admins/Teachers
+                    if (filter === 'visible') {
+                        // All published institutional news + my own hidden ones
+                        query = query.or(`is_published.eq.true,author_id.eq.${myId}`);
+                    } else if (filter === 'hidden') {
+                        // Only hidden ones I wrote
+                        query = query.eq('is_published', false).eq('author_id', myId);
+                    } else {
+                        // 'all'
+                        // can see everything (RLS will still limit if not super_admin, but usually admins see all)
+                    }
                 }
             }
 

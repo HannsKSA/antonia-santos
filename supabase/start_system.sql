@@ -123,6 +123,11 @@ CREATE POLICY "Public profiles are viewable by everyone" ON profiles FOR SELECT 
 DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
 CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Admins can update profile status" ON profiles;
+CREATE POLICY "Admins can update profile status" ON profiles FOR UPDATE USING (
+  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
+);
+
 ALTER TABLE user_groups ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can see their own group memberships" ON user_groups;
 CREATE POLICY "Users can see their own group memberships" ON user_groups FOR SELECT USING (auth.uid() = user_id);

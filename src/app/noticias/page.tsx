@@ -1,12 +1,8 @@
-'use client';
-
-import Navbar from '@/components/Navbar';
 import NewsFeed from '@/components/NewsFeed';
 
 export default function NoticiasPublicasPage() {
     return (
-        <div style={{ backgroundColor: '#f8fafc', minHeight: '100vh' }}>
-            <Navbar />
+        <div style={{ backgroundColor: '#f8fafc', minHeight: '100vh', paddingTop: '20px' }}>
 
             <div className="container" style={{ padding: '2rem 1rem', maxWidth: '800px' }}>
                 <header style={{ textAlign: 'center', marginBottom: '3rem', paddingTop: '2rem' }}>

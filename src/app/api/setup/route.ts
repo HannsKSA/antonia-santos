@@ -227,6 +227,12 @@ export async function POST() {
                 CREATE POLICY "Users can update own profile"
                   ON profiles FOR UPDATE USING (auth.uid() = id);
 
+                DROP POLICY IF EXISTS "Admins can update profile status" ON profiles;
+                CREATE POLICY "Admins can update profile status"
+                  ON profiles FOR UPDATE USING (
+                    auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
+                  );
+
                 DROP POLICY IF EXISTS "Public posts are viewable by everyone" ON posts;
                 CREATE POLICY "Public posts are viewable by everyone"
                   ON posts FOR SELECT USING (is_published = true AND (is_public = true OR auth.uid() IS NOT NULL));
