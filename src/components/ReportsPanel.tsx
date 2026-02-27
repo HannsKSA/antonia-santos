@@ -221,8 +221,8 @@ export default function ReportsPanel({ userProfile }: { userProfile: any }) {
                                     <p style={{ fontSize: '0.85rem', margin: '0.25rem 0' }}>
                                         <strong>Motivo:</strong> {r.reason}
                                     </p>
-                                    {r.post && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Post: "{r.post?.title}"</p>}
-                                    {r.comment && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Comentario: "{r.comment?.content?.substring(0, 60)}..."</p>}
+                                    {r.post && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Post: &quot;{r.post?.title}&quot;</p>}
+                                    {r.comment && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Comentario: &quot;{r.comment?.content?.substring(0, 60)}...&quot;</p>}
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
                                     <button onClick={() => handleReviewReport(r.id)} className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.82rem' }}>✓ Revisado</button>
