@@ -179,11 +179,13 @@ FOR ALL USING (
   auth.uid() IN (SELECT id FROM profiles WHERE role = 'super_admin')
 );
 
+DROP POLICY IF EXISTS "Admins and Teachers can edit or hide posts" ON posts;
 CREATE POLICY "Admins and Teachers can edit or hide posts" ON posts 
 FOR UPDATE USING (
   auth.uid() IN (SELECT id FROM profiles WHERE role IN ('admin', 'teacher'))
 );
 
+DROP POLICY IF EXISTS "Authors can create posts" ON posts;
 CREATE POLICY "Authors can create posts" ON posts 
 FOR INSERT WITH CHECK (
   auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
