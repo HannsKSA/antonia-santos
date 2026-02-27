@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import CreatePost from '@/components/CreatePost';
 import NewsFeed from '@/components/NewsFeed';
 import CreateProposal from '@/components/CreateProposal';
@@ -17,12 +17,40 @@ export const dynamic = 'force-dynamic';
 
 type Tab = 'feed' | 'proposals' | 'polls' | 'approvals' | 'create' | 'metrics' | 'users_admin' | 'groups_admin';
 
-export default function DashboardPage() {
+function DashboardContent() {
     const [profile, setProfile] = useState<any>(null);
     const [pendingUsers, setPendingUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<Tab>('feed');
     const router = useRouter();
+    const searchParams = useSearchParams();
+
+    const fetchPendingUsers = async () => {
+        const { data } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false });
+        if (data) setPendingUsers(data);
+    };
+
+    const handleStatusUpdate = async (userId: string, newStatus: 'approved' | 'rejected') => {
+        const { error } = await supabase
+            .from('profiles')
+            .update({ status: newStatus })
+            .eq('id', userId);
+
+        if (!error) {
+            setPendingUsers(prev => prev.filter(u => u.id !== userId));
+        } else {
+            alert('Error al actualizar estado: ' + error.message);
+        }
+    };
+
+    useEffect(() => {
+        const tab = (searchParams.get('tab') || 'feed') as Tab;
+        if (tab) setActiveTab(tab);
+    }, [searchParams]);
 
     useEffect(() => {
         async function checkUser() {
@@ -57,36 +85,9 @@ export default function DashboardPage() {
         checkUser();
     }, []);
 
-    async function fetchPendingUsers() {
-        const { data } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('status', 'pending')
-            .order('created_at', { ascending: false });
-        if (data) setPendingUsers(data);
-    }
-
-    async function handleStatusUpdate(userId: string, newStatus: 'approved' | 'rejected') {
-        const { error } = await supabase
-            .from('profiles')
-            .update({ status: newStatus })
-            .eq('id', userId);
-
-        if (!error) {
-            setPendingUsers(prev => prev.filter(u => u.id !== userId));
-        } else {
-            alert('Error al actualizar estado: ' + error.message);
-        }
-    }
-
-    const handleLogout = async () => {
-        await supabase.auth.signOut();
-        router.push('/');
-    };
-
     if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Cargando...</div>;
 
-    const isAdmin = ['super_admin', 'admin', 'teacher'].includes(profile?.role);
+    const isAdmin = profile && ['super_admin', 'admin', 'teacher'].includes(profile.role);
     const isApproved = profile?.status === 'approved';
 
     return (
@@ -102,9 +103,6 @@ export default function DashboardPage() {
                         {profile?.status === 'pending' && <span style={{ marginLeft: '0.5rem', color: 'var(--error)' }}>(Pendiente de aprobación)</span>}
                     </p>
                 </div>
-                <button onClick={handleLogout} className="btn-accent" style={{ background: 'transparent', border: '1px solid var(--error)', color: 'var(--error)', padding: '0.5rem 1rem' }}>
-                    Cerrar Sesión
-                </button>
             </header>
 
             {/* Navegación por Tabs */}
@@ -119,17 +117,6 @@ export default function DashboardPage() {
 
                 {isApproved && (
                     <TabButton active={activeTab === 'create'} onClick={() => setActiveTab('create')} label="✍️ Crear" />
-                )}
-
-                {isAdmin && (
-                    <TabButton active={activeTab === 'approvals'} onClick={() => setActiveTab('approvals')} label={`🔔 Solicitudes (${pendingUsers.length})`} />
-                )}
-
-                {profile?.role === 'super_admin' && (
-                    <>
-                        <TabButton active={activeTab === 'users_admin'} onClick={() => setActiveTab('users_admin')} label="👥 Usuarios" />
-                        <TabButton active={activeTab === 'groups_admin'} onClick={() => setActiveTab('groups_admin')} label="🏗️ Grupos" />
-                    </>
                 )}
             </nav>
 
@@ -204,6 +191,14 @@ export default function DashboardPage() {
                 )}
             </main>
         </div>
+    );
+}
+
+export default function DashboardPage() {
+    return (
+        <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Cargando panel...</div>}>
+            <DashboardContent />
+        </Suspense>
     );
 }
 
