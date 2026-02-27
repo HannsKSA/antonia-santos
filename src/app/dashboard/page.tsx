@@ -7,11 +7,13 @@ import CreatePost from '@/components/CreatePost';
 import NewsFeed from '@/components/NewsFeed';
 import CreateProposal from '@/components/CreateProposal';
 import ProposalFeed from '@/components/ProposalFeed';
+import CreatePoll from '@/components/CreatePoll';
+import PollFeed from '@/components/PollFeed';
 import ReportsPanel from '@/components/ReportsPanel';
 
 export const dynamic = 'force-dynamic';
 
-type Tab = 'feed' | 'proposals' | 'approvals' | 'create' | 'metrics';
+type Tab = 'feed' | 'proposals' | 'polls' | 'approvals' | 'create' | 'metrics';
 
 export default function DashboardPage() {
     const [profile, setProfile] = useState<any>(null);
@@ -107,6 +109,7 @@ export default function DashboardPage() {
             <nav style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', overflowX: 'auto' }}>
                 <TabButton active={activeTab === 'feed'} onClick={() => setActiveTab('feed')} label="📰 Noticias" />
                 <TabButton active={activeTab === 'proposals'} onClick={() => setActiveTab('proposals')} label="💡 Propuestas" />
+                <TabButton active={activeTab === 'polls'} onClick={() => setActiveTab('polls')} label="📊 Encuestas" />
 
                 {isAdmin && (
                     <TabButton active={activeTab === 'metrics'} onClick={() => setActiveTab('metrics')} label="📊 Métricas" />
@@ -138,11 +141,17 @@ export default function DashboardPage() {
                     isApproved ? <ProposalFeed userProfile={profile} /> : <PendingMessage />
                 )}
 
+                {activeTab === 'polls' && (
+                    isApproved ? <PollFeed userProfile={profile} /> : <PendingMessage />
+                )}
+
                 {activeTab === 'create' && isApproved && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                         {isAdmin && (
                             <section>
                                 <CreatePost userProfile={profile} onPostCreated={() => setActiveTab('feed')} />
+                                <div style={{ height: '1px', background: '#e2e8f0', margin: '2rem 0' }} />
+                                <CreatePoll userProfile={profile} onPollCreated={() => setActiveTab('polls')} />
                                 <div style={{ height: '1px', background: '#e2e8f0', margin: '2rem 0' }} />
                             </section>
                         )}
