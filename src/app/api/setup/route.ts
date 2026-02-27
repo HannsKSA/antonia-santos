@@ -403,8 +403,9 @@ export async function POST() {
     'Perfil super_admin',
     async () => {
       if (!userId) return false;
-      const { data } = await admin.from('profiles').select('role').eq('id', userId).single();
-      return data?.role === 'super_admin';
+      const { data } = await admin.from('profiles').select('role, email').eq('id', userId).single();
+      // Si el rol es super_admin PERO el email es null, forzamos re-ejecución para sincronizarlo
+      return data?.role === 'super_admin' && !!data?.email;
     },
     async () => {
       if (!userId) throw new Error('No se pudo obtener el userId del admin');
@@ -440,6 +441,31 @@ export async function POST() {
         );
         if (error) throw error;
       }
+    }
+  ));
+
+  // ─── PASO 8: Sincronizar Emails Existentes ─────────────────────────────────
+  log.push(await step(
+    'Sincronizar Emails',
+    async () => false, // Siempre intentar sincronizar lo que falte
+    async () => {
+      const { data: users } = await admin.auth.admin.listUsers();
+      if (users?.users) {
+        for (const u of users.users) {
+          if (u.email) {
+            await admin.from('profiles').update({ email: u.email }).eq('id', u.id).is('email', null);
+          }
+        }
+      }
+    }
+  ));
+
+  // ─── PASO 9: Refrescar Cache de Esquema ─────────────────────────────────────
+  log.push(await step(
+    'Refrescar Cache SQL',
+    async () => false,
+    async () => {
+      await execSQL(`NOTIFY pgrst, 'reload schema';`);
     }
   ));
 
