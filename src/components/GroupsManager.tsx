@@ -24,6 +24,18 @@ export default function GroupsManager() {
     const [editName, setEditName] = useState('');
     const [parentId, setParentId] = useState<string | null>(null);
 
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+    const toggleExpand = (id: string, e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        setExpandedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
     const fetchGroups = async () => {
         setLoading(true);
         const { data, error } = await supabase.from('groups').select('*').order('name');
@@ -39,7 +51,17 @@ export default function GroupsManager() {
                         children: buildTree(nodes, node.id)
                     }));
             };
-            setTree(buildTree(data));
+            const newTree = buildTree(data);
+            setTree(newTree);
+
+            // Auto-expand top level groups if they were not expanded
+            setExpandedIds(prev => {
+                const next = new Set(prev);
+                newTree.forEach(node => {
+                    if (node.children.length > 0) next.add(node.id);
+                });
+                return next;
+            });
         }
         setLoading(false);
     };
@@ -52,13 +74,16 @@ export default function GroupsManager() {
         e.preventDefault();
         if (!newGroupName.trim()) return;
         setCreating(true);
-        const { error } = await supabase.from('groups').insert({
+        const { data, error } = await supabase.from('groups').insert({
             name: newGroupName.trim(),
             parent_id: parentId
-        });
+        }).select().single();
         setCreating(false);
         if (error) alert(error.message);
         else {
+            if (parentId) {
+                setExpandedIds(prev => new Set(prev).add(parentId));
+            }
             setNewGroupName('');
             setParentId(null);
             fetchGroups();
@@ -82,81 +107,98 @@ export default function GroupsManager() {
         }
     };
 
-    const GroupItem = ({ node, depth }: { node: GroupNode, depth: number }) => (
-        <div key={node.id} style={{
-            marginLeft: `${depth * 24}px`,
-            borderLeft: depth > 0 ? '2px solid #e2e8f0' : 'none',
-            paddingLeft: depth > 0 ? '16px' : '0',
-            marginBottom: '0.5rem',
-            position: 'relative'
-        }}>
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '0.75rem 1rem',
-                background: 'white',
-                borderRadius: '10px',
-                border: '1px solid #edf2f7',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-                transition: 'var(--transition)'
+    const GroupItem = ({ node, depth }: { node: GroupNode, depth: number }) => {
+        const isExpanded = expandedIds.has(node.id);
+        const hasChildren = node.children.length > 0;
+
+        return (
+            <div key={node.id} style={{
+                marginLeft: `${depth * 20}px`,
+                borderLeft: depth > 0 ? '1px solid #e2e8f0' : 'none',
+                paddingLeft: depth > 0 ? '16px' : '0',
+                marginBottom: '0.25rem',
+                position: 'relative'
             }}>
-                {editingId === node.id ? (
-                    <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
-                        <input
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            style={{ ...inputStyle, flex: 1 }}
-                            autoFocus
-                        />
-                        <button onClick={() => handleUpdateGroup(node.id)} className="btn-primary" style={{ padding: '0.4rem 0.8rem', minHeight: 'unset' }}>💾</button>
-                        <button onClick={() => setEditingId(null)} className="btn-accent" style={{ padding: '0.4rem 0.8rem', minHeight: 'unset', background: '#cbd5e1' }}>❌</button>
-                    </div>
-                ) : (
-                    <>
-                        <span style={{ fontSize: '1.2rem' }}>{node.children.length > 0 ? '📁' : '📄'}</span>
-                        <span style={{ fontWeight: 600, flex: 1, color: 'var(--primary)' }}>{node.name}</span>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                            <button
-                                onClick={() => {
-                                    setParentId(node.id);
-                                    setNewGroupName('');
-                                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                                    setTimeout(() => document.getElementById('new-group-input')?.focus(), 300);
-                                }}
-                                style={iconBtnStyle}
-                                title="Añadir subgrupo"
-                            >
-                                ➕
-                            </button>
-                            <button
-                                onClick={() => {
-                                    setEditingId(node.id);
-                                    setEditName(node.name);
-                                }}
-                                style={iconBtnStyle}
-                                title="Editar"
-                            >
-                                ✏️
-                            </button>
-                            <button
-                                onClick={() => handleDeleteGroup(node.id, node.name)}
-                                style={{ ...iconBtnStyle, color: 'var(--error)' }}
-                                title="Eliminar"
-                            >
-                                🗑️
-                            </button>
+                <div
+                    onClick={() => hasChildren && toggleExpand(node.id)}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '0.6rem 1rem',
+                        background: 'white',
+                        borderRadius: '10px',
+                        border: '1px solid #edf2f7',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.01)',
+                        transition: 'var(--transition)',
+                        cursor: hasChildren ? 'pointer' : 'default'
+                    }}>
+                    {editingId === node.id ? (
+                        <div style={{ display: 'flex', gap: '8px', flex: 1 }} onClick={e => e.stopPropagation()}>
+                            <input
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                style={{ ...inputStyle, flex: 1 }}
+                                autoFocus
+                            />
+                            <button onClick={() => handleUpdateGroup(node.id)} className="btn-primary" style={{ padding: '0.4rem 0.8rem', minHeight: 'unset' }}>💾</button>
+                            <button onClick={() => setEditingId(null)} className="btn-accent" style={{ padding: '0.4rem 0.8rem', minHeight: 'unset', background: '#cbd5e1' }}>❌</button>
                         </div>
-                    </>
+                    ) : (
+                        <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                {hasChildren && (
+                                    <span style={{ fontSize: '0.7rem', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', color: '#94a3b8' }}>
+                                        ▶
+                                    </span>
+                                )}
+                                <span style={{ fontSize: '1.1rem' }}>
+                                    {hasChildren ? (isExpanded ? '📂' : '📁') : '📄'}
+                                </span>
+                                <span style={{ fontWeight: 600, color: 'var(--primary)', fontSize: '0.95rem' }}>{node.name}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px' }} onClick={e => e.stopPropagation()}>
+                                <button
+                                    onClick={() => {
+                                        setParentId(node.id);
+                                        setNewGroupName('');
+                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                        setTimeout(() => document.getElementById('new-group-input')?.focus(), 300);
+                                    }}
+                                    style={iconBtnStyle}
+                                    title="Añadir subgrupo"
+                                >
+                                    ➕
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setEditingId(node.id);
+                                        setEditName(node.name);
+                                    }}
+                                    style={iconBtnStyle}
+                                    title="Editar"
+                                >
+                                    ✏️
+                                </button>
+                                <button
+                                    onClick={() => handleDeleteGroup(node.id, node.name)}
+                                    style={{ ...iconBtnStyle, color: 'var(--error)' }}
+                                    title="Eliminar"
+                                >
+                                    🗑️
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </div>
+                {hasChildren && isExpanded && (
+                    <div style={{ marginTop: '0.25rem' }}>
+                        {node.children.map(child => <GroupItem key={child.id} node={child} depth={depth + 1} />)}
+                    </div>
                 )}
             </div>
-            {node.children.length > 0 && (
-                <div style={{ marginTop: '0.5rem' }}>
-                    {node.children.map(child => <GroupItem key={child.id} node={child} depth={depth + 1} />)}
-                </div>
-            )}
-        </div>
-    );
+        );
+    };
 
     return (
         <div className="glass-card" style={{ padding: '2rem' }}>
