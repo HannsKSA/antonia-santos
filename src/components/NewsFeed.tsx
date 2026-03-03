@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 
 type PostAction = 'idle' | 'editing';
@@ -40,7 +40,8 @@ function MediaCarousel({ media }: { media: any[] }) {
     );
 }
 
-function PostCard({ post, userProfile, onRefresh }: { post: any; userProfile?: any; onRefresh: () => void }) {
+function PostCard({ post, userProfile, isRead, onRefresh, onSeen }: { post: any; userProfile?: any; isRead?: boolean; onRefresh: () => void; onSeen?: (id: string) => void }) {
+    const cardRef = useRef<HTMLElement>(null);
     const [action, setAction] = useState<PostAction>('idle');
     const [editTitle, setEditTitle] = useState(post.title);
     const [editContent, setEditContent] = useState(post.content);
@@ -50,6 +51,23 @@ function PostCard({ post, userProfile, onRefresh }: { post: any; userProfile?: a
     const isAdmin = userProfile && ['super_admin', 'admin', 'teacher'].includes(userProfile.role);
     const isSuperAdmin = userProfile && userProfile.role === 'super_admin';
     const isOwner = userProfile && userProfile.id === post.author_id;
+
+    useEffect(() => {
+        if (isRead || !onSeen || !cardRef.current || !userProfile) return;
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    onSeen(post.id);
+                    observer.disconnect();
+                }
+            },
+            { threshold: 0.5 } // Mark as read when 50% visible
+        );
+
+        observer.observe(cardRef.current);
+        return () => observer.disconnect();
+    }, [isRead, post.id, onSeen, userProfile]);
 
     const handleHide = async () => {
         if (!confirm('¿Ocultar esta noticia?')) return;
@@ -100,7 +118,7 @@ function PostCard({ post, userProfile, onRefresh }: { post: any; userProfile?: a
     const mediaItems = post.media || (post.multimedia_url ? [{ url: post.multimedia_url, type: post.multimedia_url.match(/\.(mp4|webm|ogg|mov)$/i) ? 'video' : 'image' }] : []);
 
     return (
-        <article className="glass-card" style={{
+        <article ref={cardRef} className="glass-card" style={{
             padding: isHidden ? '1rem 2rem' : '2rem',
             borderLeft: isHidden ? '4px solid #94a3b8' : (post.is_public ? '4px solid #3b82f6' : '4px solid var(--accent)'),
             opacity: isHidden ? 0.8 : 1,
@@ -122,6 +140,7 @@ function PostCard({ post, userProfile, onRefresh }: { post: any; userProfile?: a
                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                                 {isHidden && <span style={{ ...badgeStyle, background: '#f1f5f9', color: '#64748b' }}>🙈 OCULTA</span>}
                                 {post.is_public && <span style={{ ...badgeStyle, background: '#dbeafe', color: '#1e40af' }}>🌍 PÚBLICA</span>}
+                                {!isRead && userProfile && !isHidden && <span style={{ ...badgeStyle, background: 'var(--error)', color: 'white' }}>✨ NUEVA</span>}
                                 <span style={badgeStyle}>{post.group?.name || 'General'}</span>
                             </div>
                             <h3 style={{ marginTop: '0.5rem', color: isHidden ? '#64748b' : 'var(--primary)' }}>{post.title}</h3>
@@ -287,15 +306,16 @@ export default function NewsFeed({ userProfile, onlyPublic = false }: { userProf
                 <div className="glass-card" style={{ padding: '3rem', textAlign: 'center', borderStyle: 'dashed' }}>
                     <p style={{ color: 'var(--text-muted)' }}>No hay noticias disponibles por el momento.</p>
                 </div>
-            ) : posts.map(post => {
-                if (isAdmin) {
-                    return <PostCard key={post.id} post={post} userProfile={userProfile} onRefresh={fetchFeed} />;
-                }
-
-                return (
-                    <PostCard key={post.id} post={post} userProfile={userProfile} onRefresh={fetchFeed} />
-                );
-            })}
+            ) : posts.map(post => (
+                <PostCard
+                    key={post.id}
+                    post={post}
+                    userProfile={userProfile}
+                    isRead={readPosts.includes(post.id)}
+                    onRefresh={fetchFeed}
+                    onSeen={handleConfirmRead}
+                />
+            ))}
         </div>
     );
 }
