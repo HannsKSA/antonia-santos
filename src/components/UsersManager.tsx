@@ -407,26 +407,56 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
 
 // ── Selector de grupos reutilizable ─────────────────────────────────────────
 function GroupPicker({ groups, selectedIds, onToggle }: { groups: any[]; selectedIds: string[]; onToggle: (id: string) => void }) {
+    const buildTree = (nodes: any[], parent: string | null = null): any[] => {
+        return nodes
+            .filter(node => node.parent_id === parent)
+            .map(node => ({
+                ...node,
+                children: buildTree(nodes, node.id)
+            }));
+    };
+
+    const tree = buildTree(groups);
+
+    const GroupItem = ({ node, depth }: { node: any, depth: number }) => (
+        <div key={node.id}>
+            <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                padding: '4px 8px',
+                borderRadius: '6px',
+                marginLeft: `${depth * 20}px`,
+                background: selectedIds.includes(node.id) ? 'rgba(26, 54, 93, 0.05)' : 'transparent',
+                transition: 'var(--transition)'
+            }}>
+                <input type="checkbox" checked={selectedIds.includes(node.id)} onChange={() => onToggle(node.id)} />
+                <span style={{ color: depth === 0 ? 'var(--primary)' : 'inherit', fontWeight: depth === 0 ? 600 : 400 }}>
+                    {depth > 0 && '↳ '} {node.name}
+                </span>
+            </label>
+            {node.children.map((child: any) => <GroupItem key={child.id} node={child} depth={depth + 1} />)}
+        </div>
+    );
+
     return (
         <div>
             <label style={labelStyle}>Asignar Grados / Grupos</label>
             <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-                gap: '0.5rem',
-                maxHeight: '150px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px',
+                maxHeight: '200px',
                 overflowY: 'auto',
-                padding: '1rem',
+                padding: '0.75rem',
                 background: '#f8fafc',
                 borderRadius: '8px',
                 border: '1px solid #e2e8f0',
             }}>
-                {groups.map(g => (
-                    <label key={g.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={selectedIds.includes(g.id)} onChange={() => onToggle(g.id)} />
-                        {g.name}
-                    </label>
-                ))}
+                {tree.map(node => <GroupItem key={node.id} node={node} depth={0} />)}
+                {groups.length === 0 && <span style={{ color: '#ccc', fontSize: '0.75rem' }}>No hay grupos disponibles</span>}
             </div>
         </div>
     );

@@ -71,6 +71,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
 CREATE TABLE IF NOT EXISTS public.groups (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
+  parent_id UUID REFERENCES public.groups(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -257,6 +258,10 @@ CREATE POLICY "Admins can update profile status" ON public.profiles FOR UPDATE U
 ALTER TABLE public.groups ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public groups are viewable by everyone" ON public.groups;
 CREATE POLICY "Public groups are viewable by everyone" ON public.groups FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Admins can manage groups" ON public.groups;
+CREATE POLICY "Admins can manage groups" ON public.groups FOR ALL USING (
+  auth.uid() IN (SELECT id FROM public.profiles WHERE role IN ('super_admin', 'admin'))
+);
 
 -- USER_GROUPS
 ALTER TABLE public.user_groups ENABLE ROW LEVEL SECURITY;

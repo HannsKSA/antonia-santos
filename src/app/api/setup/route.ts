@@ -85,7 +85,9 @@ export async function POST() {
 
         CREATE TABLE IF NOT EXISTS public.groups (
           id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-          name TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ DEFAULT NOW()
+          name TEXT NOT NULL UNIQUE,
+          parent_id UUID REFERENCES public.groups(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ DEFAULT NOW()
         );
 
         CREATE TABLE IF NOT EXISTS public.user_groups (
@@ -115,6 +117,7 @@ export async function POST() {
       await execSQL(`
         ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS media JSONB DEFAULT '[]'::jsonb;
         ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;
+        ALTER TABLE public.groups ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES public.groups(id) ON DELETE CASCADE;
       `);
     }
   ));
@@ -178,7 +181,14 @@ export async function POST() {
         DROP POLICY IF EXISTS "NOTIFICATIONS: SELECT" ON public.notifications;
         CREATE POLICY "NOTIFICATIONS: SELECT" ON public.notifications FOR SELECT USING (auth.uid() = user_id);
         
-        -- ... y todas las demás políticas unificadas ...
+        -- Groups
+        ALTER TABLE public.groups ENABLE ROW LEVEL SECURITY;
+        DROP POLICY IF EXISTS "Public groups are viewable by everyone" ON public.groups;
+        CREATE POLICY "Public groups are viewable by everyone" ON public.groups FOR SELECT USING (true);
+        DROP POLICY IF EXISTS "Admins can manage groups" ON public.groups;
+        CREATE POLICY "Admins can manage groups" ON public.groups FOR ALL USING (
+          auth.uid() IN (SELECT id FROM public.profiles WHERE role IN ('super_admin', 'admin'))
+        );
       `);
     }
   ));

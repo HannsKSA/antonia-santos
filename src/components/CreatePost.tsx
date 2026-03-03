@@ -110,9 +110,19 @@ export default function CreatePost({ userProfile, onPostCreated }: { userProfile
                             style={inputStyle}
                             disabled={isPublic}
                         >
-                            {groups.map(g => (
-                                <option key={g.id} value={g.id}>{g.name}</option>
-                            ))}
+                            {(() => {
+                                const buildFlatTree = (nodes: any[], parent: string | null = null, depth: number = 0): any[] => {
+                                    let result: any[] = [];
+                                    nodes.filter(n => n.parent_id === parent).forEach(n => {
+                                        result.push({ ...n, displayName: '\u00A0\u00A0'.repeat(depth * 2) + (depth > 0 ? '↳ ' : '') + n.name });
+                                        result = result.concat(buildFlatTree(nodes, n.id, depth + 1));
+                                    });
+                                    return result;
+                                };
+                                return buildFlatTree(groups).map(g => (
+                                    <option key={g.id} value={g.id}>{g.displayName}</option>
+                                ));
+                            })()}
                         </select>
                     </div>
                     <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingBottom: '0.75rem' }}>
