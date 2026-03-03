@@ -236,6 +236,16 @@ ALTER TABLE poll_options ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Poll options are viewable by everyone" ON poll_options;
 CREATE POLICY "Poll options are viewable by everyone" ON poll_options FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Authors can create poll options" ON poll_options;
+CREATE POLICY "Authors can create poll options" ON poll_options FOR INSERT WITH CHECK (
+  auth.uid() IN (SELECT author_id FROM posts WHERE id = post_id)
+);
+
+DROP POLICY IF EXISTS "Super Admins have full control over poll options" ON poll_options;
+CREATE POLICY "Super Admins have full control over poll options" ON poll_options FOR ALL USING (
+  auth.uid() IN (SELECT id FROM profiles WHERE role = 'super_admin')
+);
+
 -- 15. TABLA DE VOTOS (Encuestas)
 CREATE TABLE IF NOT EXISTS votes (
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
