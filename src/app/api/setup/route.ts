@@ -100,52 +100,6 @@ export async function POST() {
                   created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
                 );
 
-                -- Función para obtener usuarios con emails reales desde Auth (Solo para Admins)
-                CREATE OR REPLACE FUNCTION get_users_admin()
-                RETURNS TABLE (
-                  id UUID,
-                  email TEXT,
-                  first_name TEXT,
-                  last_name TEXT,
-                  username TEXT,
-                  role TEXT,
-                  status TEXT,
-                  groups_info JSONB
-                ) 
-                SECURITY DEFINER
-                SET search_path = public, auth
-                AS $$
-                BEGIN
-                  -- Verificar si el que llama es admin/super_admin/teacher
-                  IF NOT EXISTS (
-                    SELECT 1 FROM public.profiles 
-                    WHERE profiles.id = auth.uid() 
-                    AND profiles.role IN ('super_admin', 'admin', 'teacher')
-                  ) THEN
-                    RAISE EXCEPTION 'No autorizado';
-                  END IF;
-
-                  RETURN QUERY
-                  SELECT 
-                    au.id,
-                    au.email::TEXT,
-                    p.first_name,
-                    p.last_name,
-                    p.username,
-                    p.role::TEXT,
-                    p.status::TEXT,
-                    COALESCE(
-                      (SELECT jsonb_agg(jsonb_build_object('group_id', ug.group_id, 'name', g.name))
-                       FROM public.user_groups ug
-                       JOIN public.groups g ON g.id = ug.group_id
-                       WHERE ug.user_id = au.id),
-                      '[]'::jsonb
-                    ) as groups_info
-                  FROM auth.users au
-                  LEFT JOIN public.profiles p ON p.id = au.id
-                  ORDER BY p.last_name ASC;
-                END;
-                $$ LANGUAGE plpgsql;
 
                 CREATE TABLE IF NOT EXISTS groups (
                   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -236,7 +190,64 @@ export async function POST() {
     }
   ));
 
-  // ─── PASO 3: Políticas RLS (idempotente — siempre se aplican) ────────────
+  // ─── PASO 3: Función get_users_admin (siempre se recrea) ──────────────────
+  log.push(await step(
+    'Función get_users_admin',
+    async () => false, // siempre recrear (CREATE OR REPLACE es idempotente)
+    async () => {
+      await execSQL(`
+        CREATE OR REPLACE FUNCTION get_users_admin()
+        RETURNS TABLE (
+          id UUID,
+          email TEXT,
+          first_name TEXT,
+          last_name TEXT,
+          username TEXT,
+          role TEXT,
+          status TEXT,
+          groups_info JSONB
+        )
+        SECURITY DEFINER
+        SET search_path = public, auth
+        AS $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE profiles.id = auth.uid()
+            AND profiles.role IN ('super_admin', 'admin', 'teacher')
+          ) THEN
+            RAISE EXCEPTION 'No autorizado';
+          END IF;
+
+          RETURN QUERY
+          SELECT
+            au.id,
+            au.email::TEXT,
+            p.first_name,
+            p.last_name,
+            p.username,
+            p.role::TEXT,
+            p.status::TEXT,
+            COALESCE(
+              (SELECT jsonb_agg(jsonb_build_object('group_id', ug.group_id, 'name', g.name))
+               FROM public.user_groups ug
+               JOIN public.groups g ON g.id = ug.group_id
+               WHERE ug.user_id = au.id),
+              '[]'::jsonb
+            ) AS groups_info
+          FROM auth.users au
+          LEFT JOIN public.profiles p ON p.id = au.id
+          ORDER BY p.last_name ASC;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        -- Asegurar que solo service_role y usuarios autenticados puedan ejecutarla
+        GRANT EXECUTE ON FUNCTION get_users_admin() TO authenticated;
+      `);
+    }
+  ));
+
+  // ─── PASO 4: Políticas RLS (idempotente — siempre se aplican) ────────────
   // Solo permite a usuarios UNIRSE a grupos existentes, no crearlos.
   log.push(await step(
     'Políticas RLS',

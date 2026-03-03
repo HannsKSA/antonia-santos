@@ -113,6 +113,56 @@ INSERT INTO groups (name) VALUES
 ('Grado 1-2')
 ON CONFLICT (name) DO NOTHING;
 
+-- 7b. FUNCIÓN PARA LISTAR USUARIOS CON EMAIL REAL (JOIN con auth.users)
+-- Esta función es SECURITY DEFINER para acceder a auth.users con seguridad.
+-- Se puede re-ejecutar sin problemas (CREATE OR REPLACE).
+CREATE OR REPLACE FUNCTION get_users_admin()
+RETURNS TABLE (
+  id UUID,
+  email TEXT,
+  first_name TEXT,
+  last_name TEXT,
+  username TEXT,
+  role TEXT,
+  status TEXT,
+  groups_info JSONB
+)
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE profiles.id = auth.uid()
+    AND profiles.role IN ('super_admin', 'admin', 'teacher')
+  ) THEN
+    RAISE EXCEPTION 'No autorizado';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    au.id,
+    au.email::TEXT,
+    p.first_name,
+    p.last_name,
+    p.username,
+    p.role::TEXT,
+    p.status::TEXT,
+    COALESCE(
+      (SELECT jsonb_agg(jsonb_build_object('group_id', ug.group_id, 'name', g.name))
+       FROM public.user_groups ug
+       JOIN public.groups g ON g.id = ug.group_id
+       WHERE ug.user_id = au.id),
+      '[]'::jsonb
+    ) AS groups_info
+  FROM auth.users au
+  LEFT JOIN public.profiles p ON p.id = au.id
+  ORDER BY p.last_name ASC;
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT EXECUTE ON FUNCTION get_users_admin() TO authenticated;
+
 -- 8. POLÍTICAS DE SEGURIDAD (RLS) - Grupos y Perfiles
 ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public groups are viewable by everyone" ON groups;
