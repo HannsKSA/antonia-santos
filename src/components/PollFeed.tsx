@@ -96,6 +96,17 @@ function PollCard({ poll, userProfile, onRefresh }: { poll: any; userProfile: an
         setPendingOptionText('');
     };
 
+    const handleClose = async () => {
+        if (!confirm('¿Cerrar esta encuesta? Nadie más podrá votar.')) return;
+        try {
+            const { error } = await supabase.from('posts').update({ is_closed: true }).eq('id', poll.id);
+            if (error) throw error;
+            onRefresh();
+        } catch (error: any) {
+            alert('Error al cerrar: ' + error.message);
+        }
+    };
+
     const totalVotes = poll.options.reduce((acc: number, opt: any) => acc + (opt.votes_count || 0), 0);
 
     const handleDelete = async () => {
@@ -124,7 +135,10 @@ function PollCard({ poll, userProfile, onRefresh }: { poll: any; userProfile: an
             <article className="glass-card" style={{ padding: '2rem', borderLeft: '4px solid #8b5cf6' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1rem' }}>
                     <div>
-                        <span style={pollBadge}>📊 ENCUESTA · {poll.group?.name}</span>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <span style={pollBadge}>📊 ENCUESTA · {poll.group?.name}</span>
+                            {poll.is_closed && <span style={{ ...pollBadge, background: '#fee2e2', color: '#ef4444' }}>🔒 CERRADA</span>}
+                        </div>
                         <h3 style={{ marginTop: '0.5rem', color: 'var(--primary)' }}>{poll.title}</h3>
                         {poll.content && <p style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{poll.content}</p>}
                     </div>
@@ -150,8 +164,8 @@ function PollCard({ poll, userProfile, onRefresh }: { poll: any; userProfile: an
                             <div key={opt.id} style={{ position: 'relative' }}>
                                 <button
                                     onClick={() => openConfirm(opt.id, opt.option_text)}
-                                    disabled={hasVoted || voting}
-                                    title={hasVoted ? 'Ya has votado en esta encuesta' : ''}
+                                    disabled={hasVoted || voting || poll.is_closed}
+                                    title={poll.is_closed ? 'Esta encuesta está cerrada' : (hasVoted ? 'Ya has votado' : '')}
                                     style={{
                                         width: '100%',
                                         textAlign: 'left',
@@ -211,9 +225,10 @@ function PollCard({ poll, userProfile, onRefresh }: { poll: any; userProfile: an
                 </div>
 
                 <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '1rem' }}>
-                    {hasVoted ? (
+                    {hasVoted || poll.is_closed ? (
                         <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                             Total: <strong>{totalVotes} votos</strong>
+                            {poll.is_closed && <span style={{ marginLeft: '0.5rem' }}>(Finalizado)</span>}
                         </span>
                     ) : (
                         <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
@@ -222,25 +237,26 @@ function PollCard({ poll, userProfile, onRefresh }: { poll: any; userProfile: an
                     )}
                     <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <span>Por: <strong>{poll.author?.first_name}</strong></span>
-                        {isSuperAdmin && (
-                            <button
-                                onClick={handleDelete}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    fontSize: '1rem',
-                                    padding: '0.2rem',
-                                    borderRadius: '4px',
-                                    transition: 'background 0.2s',
-                                }}
-                                title="Eliminar encuesta"
-                                onMouseEnter={(e) => e.currentTarget.style.background = '#fee2e2'}
-                                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
-                            >
-                                🗑️
-                            </button>
-                        )}
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            {((userProfile?.id === poll.author_id && ['admin', 'teacher'].includes(userProfile?.role)) || userProfile?.role === 'super_admin') && !poll.is_closed && (
+                                <button
+                                    onClick={handleClose}
+                                    style={actionIconBtn}
+                                    title="Cerrar encuesta"
+                                >
+                                    🔒
+                                </button>
+                            )}
+                            {isSuperAdmin && (
+                                <button
+                                    onClick={handleDelete}
+                                    style={actionIconBtn}
+                                    title="Eliminar encuesta"
+                                >
+                                    🗑️
+                                </button>
+                            )}
+                        </div>
                     </span>
                 </div>
             </article>
@@ -313,6 +329,16 @@ export default function PollFeed({ userProfile }: { userProfile: any }) {
 }
 
 // ─── Estilos ──────────────────────────────────────────────────────────────────
+const actionIconBtn: React.CSSProperties = {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '1rem',
+    padding: '0.2rem',
+    borderRadius: '4px',
+    transition: 'background 0.2s',
+};
+
 const pollBadge: React.CSSProperties = {
     fontSize: '0.7rem',
     background: '#e0e7ff',
