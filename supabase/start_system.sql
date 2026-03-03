@@ -237,7 +237,27 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Función para obtener grupos visibles por jerarquía
+CREATE OR REPLACE FUNCTION public.get_user_visible_groups(u_id UUID)
+RETURNS TABLE (group_id UUID) AS $$
+BEGIN
+  RETURN QUERY
+  WITH RECURSIVE group_hierarchy AS (
+    -- Grupos directos del usuario
+    SELECT ug.group_id FROM public.user_groups ug WHERE ug.user_id = u_id
+    UNION
+    -- Sus ancestros (padres, abuelos...)
+    SELECT g.parent_id
+    FROM public.groups g
+    JOIN group_hierarchy gh ON g.id = gh.group_id
+    WHERE g.parent_id IS NOT NULL
+  )
+  SELECT DISTINCT gh.group_id FROM group_hierarchy gh;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 GRANT EXECUTE ON FUNCTION public.get_users_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_user_visible_groups(UUID) TO authenticated;
 
 -- ==========================================
 -- 6. POLÍTICAS RLS (Seguridad)
@@ -287,9 +307,16 @@ CREATE POLICY "Authors and Admins can update posts" ON public.posts FOR UPDATE U
   auth.uid() IN (SELECT id FROM public.profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
 );
 
-DROP POLICY IF EXISTS "Super Admins have full control over posts" ON public.posts;
-CREATE POLICY "Super Admins have full control over posts" ON public.posts FOR ALL USING (
-  auth.uid() IN (SELECT id FROM public.profiles WHERE role = 'super_admin')
+-- POSTS
+ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Visible posts" ON public.posts;
+CREATE POLICY "Visible posts" ON public.posts FOR SELECT USING (
+  (is_published = true AND (
+    is_public = true 
+    OR auth.uid() IN (SELECT id FROM public.profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
+    OR posts.group_id IN (SELECT group_id FROM public.get_user_visible_groups(auth.uid()))
+  ))
+  OR auth.uid() = author_id
 );
 
 -- POST INTERACTIONS (Likes / Reads)
