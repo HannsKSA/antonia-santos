@@ -32,7 +32,7 @@ function ConfirmModal({
                     marginBottom: '1.25rem',
                     fontSize: '0.95rem',
                 }}>
-                    "{optionText}"
+                    &ldquo;{optionText}&rdquo;
                 </p>
                 <p style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 600, marginBottom: '1.5rem' }}>
                     ⚠️ Esta acción es irreversible. Solo puedes votar una vez.
