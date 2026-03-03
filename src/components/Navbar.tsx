@@ -69,7 +69,7 @@ export default function Navbar() {
                 <img
                     src="/logo.png"
                     alt="Logo IE Antonia Santos"
-                    style={{ width: '40px', height: 'auto', borderRadius: '4px' }}
+                    style={{ width: '65px', height: 'auto', borderRadius: '4px' }}
                 />
                 <span className="brand-text" style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '1.1rem', maxWidth: '150px', lineHeight: 1.2 }}>
                     IE Antonia Santos
