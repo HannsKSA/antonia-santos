@@ -1,23 +1,31 @@
 -- ==========================================
--- 🚀 SCRIPT DE INICIO — IE ANTONIA Santos
--- Ejecuta esto UNA sola vez en el SQL Editor de Supabase.
--- Después de esto, el botón de Setup en /setup manejará
--- actualizaciones automáticamente sin necesidad de volver aquí.
+-- 🚀 SCRIPT DEFINITIVO DE INFRAESTRUCTURA — IE ANTONIA SANTOS
+-- ==========================================
+-- Este script unifica toda la base de datos de forma limpia y profesional.
+-- Es seguro ejecutarlo varias veces (idempotente).
+
+-- ==========================================
+-- 0. FUNCIONES AUXILIARES Y EXTENSIONES
 -- ==========================================
 
--- 0. FUNCIÓN AUXILIAR: exec_sql
--- Permite que la API /api/setup ejecute SQL directamente en el futuro.
+-- Permite ejecución de SQL dinámico desde la API (solo service_role)
 CREATE OR REPLACE FUNCTION public.exec_sql(sql TEXT)
 RETURNS VOID AS $$
 BEGIN
   EXECUTE sql;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
--- Restringir acceso solo al service_role
+
 REVOKE ALL ON FUNCTION public.exec_sql(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.exec_sql(TEXT) TO service_role;
 
--- 1. CREACIÓN DE TIPOS ENUM
+-- Extensión para IDs aleatorios
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- ==========================================
+-- 1. TIPOS ENUM
+-- ==========================================
+
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
         CREATE TYPE user_role AS ENUM ('super_admin', 'admin', 'teacher', 'user');
@@ -36,8 +44,12 @@ DO $$ BEGIN
     END IF;
 END $$;
 
--- 2. TABLA DE PERFILES
-CREATE TABLE IF NOT EXISTS profiles (
+-- ==========================================
+-- 2. TABLAS NÚCLEO
+-- ==========================================
+
+-- PERFILES
+CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
   email TEXT,
   username TEXT UNIQUE,
@@ -52,24 +64,31 @@ CREATE TABLE IF NOT EXISTS profiles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. TABLA DE GRUPOS (GRADOS)
-CREATE TABLE IF NOT EXISTS groups (
+-- Asegurar columna email si la tabla ya existía
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
+
+-- GRUPOS (Grados/Secciones)
+CREATE TABLE IF NOT EXISTS public.groups (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. TABLA DE SUBSCRIPCIONES (N:M)
-CREATE TABLE IF NOT EXISTS user_groups (
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+-- MEMBRESÍAS (Relación N:M)
+CREATE TABLE IF NOT EXISTS public.user_groups (
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  group_id UUID REFERENCES public.groups(id) ON DELETE CASCADE,
   PRIMARY KEY (user_id, group_id)
 );
 
--- 5. TABLA DE POSTS (NOTICIAS/EVENTOS)
-CREATE TABLE IF NOT EXISTS posts (
+-- ==========================================
+-- 3. TABLAS DE CONTENIDO
+-- ==========================================
+
+-- POSTS (Noticias, Propuestas, Encuestas)
+CREATE TABLE IF NOT EXISTS public.posts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  author_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  author_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   type content_type NOT NULL,
   title TEXT NOT NULL,
   content TEXT,
@@ -77,7 +96,7 @@ CREATE TABLE IF NOT EXISTS posts (
   multimedia_kind multimedia_type DEFAULT 'internal',
   media JSONB DEFAULT '[]'::jsonb,
   is_public BOOLEAN DEFAULT FALSE,
-  group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+  group_id UUID REFERENCES public.groups(id) ON DELETE CASCADE,
   is_published BOOLEAN DEFAULT FALSE,
   expires_at TIMESTAMPTZ,
   is_closed BOOLEAN DEFAULT FALSE,
@@ -85,38 +104,94 @@ CREATE TABLE IF NOT EXISTS posts (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Asegurar columnas nuevas en tabla existente
+-- Parche para columnas nuevas en posts si ya existía
 DO $$ 
 BEGIN 
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='posts' AND column_name='media') THEN
-    ALTER TABLE posts ADD COLUMN media JSONB DEFAULT '[]'::jsonb;
+    ALTER TABLE public.posts ADD COLUMN media JSONB DEFAULT '[]'::jsonb;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='posts' AND column_name='is_public') THEN
-    ALTER TABLE posts ADD COLUMN is_public BOOLEAN DEFAULT FALSE;
+    ALTER TABLE public.posts ADD COLUMN is_public BOOLEAN DEFAULT FALSE;
   END IF;
 END $$;
 
--- 6. TABLA DE REGISTROS DE LECTURA (ENTERADOS)
-CREATE TABLE IF NOT EXISTS post_reads (
-  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+-- INTERACCIONES DE POSTS
+CREATE TABLE IF NOT EXISTS public.post_reads (
+  post_id UUID REFERENCES public.posts(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (post_id, user_id)
 );
 
--- 7. INSERTAR DATOS INICIALES (GRUPOS)
-INSERT INTO groups (name) VALUES 
-('Administración'), 
-('Docentes'), 
-('General'), 
-('Grado 1-1'), 
-('Grado 1-2')
-ON CONFLICT (name) DO NOTHING;
+CREATE TABLE IF NOT EXISTS public.post_likes (
+  post_id UUID REFERENCES public.posts(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  PRIMARY KEY (post_id, user_id)
+);
 
--- 7b. FUNCIÓN PARA LISTAR USUARIOS CON EMAIL REAL (JOIN con auth.users)
--- Esta función es SECURITY DEFINER para acceder a auth.users con seguridad.
--- Se puede re-ejecutar sin problemas (CREATE OR REPLACE).
-CREATE OR REPLACE FUNCTION get_users_admin()
+-- ENCUESTAS
+CREATE TABLE IF NOT EXISTS public.poll_options (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  post_id UUID REFERENCES public.posts(id) ON DELETE CASCADE,
+  option_text TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.votes (
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  post_id UUID REFERENCES public.posts(id) ON DELETE CASCADE,
+  option_id UUID REFERENCES public.poll_options(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (user_id, post_id)
+);
+
+-- COMENTARIOS Y MODERACIÓN
+CREATE TABLE IF NOT EXISTS public.comments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  post_id UUID REFERENCES public.posts(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.reports (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  reporter_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  post_id UUID REFERENCES public.posts(id) ON DELETE CASCADE,
+  comment_id UUID REFERENCES public.comments(id) ON DELETE CASCADE,
+  reason TEXT NOT NULL,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'reviewed', 'dismissed')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- PROPUESTAS (Votos sociales)
+CREATE TABLE IF NOT EXISTS public.proposal_votes (
+  post_id UUID REFERENCES public.posts(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  vote_type TEXT CHECK (vote_type IN ('up', 'down')),
+  PRIMARY KEY (post_id, user_id)
+);
+
+-- ==========================================
+-- 4. SISTEMA DE NOTIFICACIONES
+-- ==========================================
+
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  actor_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT,
+  link TEXT,
+  is_read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==========================================
+-- 5. FUNCIONES DE ADMINISTRACIÓN
+-- ==========================================
+
+CREATE OR REPLACE FUNCTION public.get_users_admin()
 RETURNS TABLE (
   id UUID,
   email TEXT,
@@ -161,197 +236,121 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-GRANT EXECUTE ON FUNCTION get_users_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_users_admin() TO authenticated;
 
--- 8. POLÍTICAS DE SEGURIDAD (RLS) - Grupos y Perfiles
-ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public groups are viewable by everyone" ON groups;
-CREATE POLICY "Public groups are viewable by everyone" ON groups FOR SELECT USING (true);
+-- ==========================================
+-- 6. POLÍTICAS RLS (Seguridad)
+-- ==========================================
 
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON profiles;
-CREATE POLICY "Public profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
-CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
-
-DROP POLICY IF EXISTS "Admins can update profile status" ON profiles;
-CREATE POLICY "Admins can update profile status" ON profiles FOR UPDATE USING (
-  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
+-- PROFILES
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
+CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Admins can update profile status" ON public.profiles;
+CREATE POLICY "Admins can update profile status" ON public.profiles FOR UPDATE USING (
+  auth.uid() IN (SELECT id FROM public.profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
 );
 
-ALTER TABLE user_groups ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Users can see their own group memberships" ON user_groups;
-CREATE POLICY "Users can see their own group memberships" ON user_groups FOR SELECT USING (auth.uid() = user_id);
-DROP POLICY IF EXISTS "Admins can see all group memberships" ON user_groups;
-CREATE POLICY "Admins can see all group memberships" ON user_groups FOR SELECT USING (
-  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
-);
-DROP POLICY IF EXISTS "Users can insert their own group memberships" ON user_groups;
-CREATE POLICY "Users can insert their own group memberships" ON user_groups FOR INSERT WITH CHECK (auth.uid() = user_id);
+-- GROUPS
+ALTER TABLE public.groups ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public groups are viewable by everyone" ON public.groups;
+CREATE POLICY "Public groups are viewable by everyone" ON public.groups FOR SELECT USING (true);
 
--- 10. TABLA DE COMENTARIOS (Para el refinamiento de propuestas)
-CREATE TABLE IF NOT EXISTS comments (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  content TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 11. TABLA DE VOTOS (Apoyo social a propuestas)
-CREATE TABLE IF NOT EXISTS proposal_votes (
-  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  vote_type TEXT CHECK (vote_type IN ('up', 'down')),
-  PRIMARY KEY (post_id, user_id)
-);
-
--- 12. TABLA DE REPORTES (Denuncias)
-CREATE TABLE IF NOT EXISTS reports (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  reporter_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
-  comment_id UUID REFERENCES comments(id) ON DELETE CASCADE,
-  reason TEXT NOT NULL,
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'reviewed', 'dismissed')),
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 13. POLÍTICAS RLS ACTUALIZADAS (Idempotentes)
+-- USER_GROUPS
+ALTER TABLE public.user_groups ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can see memberships" ON public.user_groups;
+CREATE POLICY "Users can see memberships" ON public.user_groups FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Users can join groups" ON public.user_groups;
+CREATE POLICY "Users can join groups" ON public.user_groups FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- POSTS
-ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public posts are viewable by everyone" ON posts;
-CREATE POLICY "Public posts are viewable by everyone" ON posts 
-FOR SELECT USING (
+ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Visible posts" ON public.posts;
+CREATE POLICY "Visible posts" ON public.posts FOR SELECT USING (
   (is_published = true AND (is_public = true OR auth.uid() IS NOT NULL))
   OR auth.uid() = author_id
 );
-
-DROP POLICY IF EXISTS "Super Admins have full control over posts" ON posts;
-CREATE POLICY "Super Admins have full control over posts" ON posts FOR ALL USING (
-  auth.uid() IN (SELECT id FROM profiles WHERE role = 'super_admin')
+DROP POLICY IF EXISTS "Authors can create posts" ON public.posts;
+CREATE POLICY "Authors can create posts" ON public.posts FOR INSERT WITH CHECK (
+  auth.uid() IN (SELECT id FROM public.profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
+);
+DROP POLICY IF EXISTS "Authors and Admins can update posts" ON public.posts;
+CREATE POLICY "Authors and Admins can update posts" ON public.posts FOR UPDATE USING (
+  auth.uid() = author_id OR 
+  auth.uid() IN (SELECT id FROM public.profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
 );
 
-DROP POLICY IF EXISTS "Admins and Teachers can edit or hide posts" ON posts;
-CREATE POLICY "Admins and Teachers can edit or hide posts" ON posts FOR UPDATE USING (
-  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('admin', 'teacher'))
+DROP POLICY IF EXISTS "Super Admins have full control over posts" ON public.posts;
+CREATE POLICY "Super Admins have full control over posts" ON public.posts FOR ALL USING (
+  auth.uid() IN (SELECT id FROM public.profiles WHERE role = 'super_admin')
 );
 
-DROP POLICY IF EXISTS "Authors can create posts" ON posts;
-CREATE POLICY "Authors can create posts" ON posts FOR INSERT WITH CHECK (
-  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
+-- POST INTERACTIONS (Likes / Reads)
+ALTER TABLE public.post_likes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Likes: SELECT" ON public.post_likes;
+CREATE POLICY "Likes: SELECT" ON public.post_likes FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Likes: INSERT/DELETE" ON public.post_likes;
+CREATE POLICY "Likes: INSERT/DELETE" ON public.post_likes FOR ALL USING (auth.uid() = user_id);
+
+ALTER TABLE public.post_reads ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Reads: SELECT" ON public.post_reads;
+CREATE POLICY "Reads: SELECT" ON public.post_reads FOR SELECT USING (
+  auth.uid() = user_id OR 
+  auth.uid() IN (SELECT id FROM public.profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
+);
+DROP POLICY IF EXISTS "Reads: INSERT" ON public.post_reads;
+CREATE POLICY "Reads: INSERT" ON public.post_reads FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- COMMENTS
+ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "COMMENTS: SELECT" ON public.comments;
+CREATE POLICY "COMMENTS: SELECT" ON public.comments FOR SELECT USING (true);
+DROP POLICY IF EXISTS "COMMENTS: INSERT" ON public.comments;
+CREATE POLICY "COMMENTS: INSERT" ON public.comments FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "COMMENTS: DELETE" ON public.comments;
+CREATE POLICY "COMMENTS: DELETE" ON public.comments FOR DELETE USING (
+  auth.uid() = user_id OR 
+  auth.uid() IN (SELECT id FROM public.profiles WHERE role IN ('super_admin', 'admin'))
 );
 
--- COMENTARIOS
-ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Comments are viewable by everyone" ON comments;
-CREATE POLICY "Comments are viewable by everyone" ON comments FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "Users can insert comments" ON comments;
-CREATE POLICY "Users can insert comments" ON comments FOR INSERT WITH CHECK (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can edit their own comments" ON comments;
-CREATE POLICY "Users can edit their own comments" ON comments FOR UPDATE USING (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Super Admins can delete or hide comments" ON comments;
-CREATE POLICY "Super Admins can delete or hide comments" ON comments FOR ALL USING (
-  auth.uid() IN (SELECT id FROM profiles WHERE role = 'super_admin')
+-- POLLS
+ALTER TABLE public.poll_options ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "POLL_OPTIONS: SELECT" ON public.poll_options;
+CREATE POLICY "POLL_OPTIONS: SELECT" ON public.poll_options FOR SELECT USING (true);
+DROP POLICY IF EXISTS "POLL_OPTIONS: INSERT" ON public.poll_options;
+CREATE POLICY "POLL_OPTIONS: INSERT" ON public.poll_options FOR INSERT WITH CHECK (
+  auth.uid() IN (SELECT author_id FROM public.posts WHERE id = post_id)
 );
 
-DROP POLICY IF EXISTS "Admins can hide comments" ON comments;
-CREATE POLICY "Admins can hide comments" ON comments FOR UPDATE USING (
-  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('admin', 'teacher'))
-);
+ALTER TABLE public.votes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "VOTES: SELECT" ON public.votes;
+CREATE POLICY "VOTES: SELECT" ON public.votes FOR SELECT USING (true);
+DROP POLICY IF EXISTS "VOTES: INSERT" ON public.votes;
+CREATE POLICY "VOTES: INSERT" ON public.votes FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- VOTOS (Propuestas)
-ALTER TABLE proposal_votes ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Votes are viewable by everyone" ON proposal_votes;
-CREATE POLICY "Votes are viewable by everyone" ON proposal_votes FOR SELECT USING (true);
+-- PROPOSALS
+ALTER TABLE public.proposal_votes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "PROPOSAL_VOTES: SELECT" ON public.proposal_votes;
+CREATE POLICY "PROPOSAL_VOTES: SELECT" ON public.proposal_votes FOR SELECT USING (true);
+DROP POLICY IF EXISTS "PROPOSAL_VOTES: INSERT/UPDATE" ON public.proposal_votes;
+CREATE POLICY "PROPOSAL_VOTES: INSERT/UPDATE" ON public.proposal_votes FOR ALL USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can vote once per post" ON proposal_votes;
-CREATE POLICY "Users can vote once per post" ON proposal_votes FOR INSERT WITH CHECK (auth.uid() = user_id);
+-- NOTIFICATIONS
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "NOTIFICATIONS: SELECT" ON public.notifications;
+CREATE POLICY "NOTIFICATIONS: SELECT" ON public.notifications FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "NOTIFICATIONS: SYSTEM_INSERT" ON public.notifications;
+CREATE POLICY "NOTIFICATIONS: SYSTEM_INSERT" ON public.notifications FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "NOTIFICATIONS: UPDATE" ON public.notifications;
+CREATE POLICY "NOTIFICATIONS: UPDATE" ON public.notifications FOR UPDATE USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Users can update their vote" ON proposal_votes;
-CREATE POLICY "Users can update their vote" ON proposal_votes FOR UPDATE USING (auth.uid() = user_id);
+-- ==========================================
+-- 7. TRIGGERS (Automatización)
+-- ==========================================
 
--- 14. TABLA DE OPCIONES DE ENCUESTA
-CREATE TABLE IF NOT EXISTS poll_options (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
-  option_text TEXT NOT NULL
-);
-
-ALTER TABLE poll_options ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Poll options are viewable by everyone" ON poll_options;
-CREATE POLICY "Poll options are viewable by everyone" ON poll_options FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "Authors can create poll options" ON poll_options;
-CREATE POLICY "Authors can create poll options" ON poll_options FOR INSERT WITH CHECK (
-  auth.uid() IN (SELECT author_id FROM posts WHERE id = post_id)
-);
-
-DROP POLICY IF EXISTS "Super Admins have full control over poll options" ON poll_options;
-CREATE POLICY "Super Admins have full control over poll options" ON poll_options FOR ALL USING (
-  auth.uid() IN (SELECT id FROM profiles WHERE role = 'super_admin')
-);
-
--- 15. TABLA DE VOTOS (Encuestas)
-CREATE TABLE IF NOT EXISTS votes (
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
-  option_id UUID REFERENCES poll_options(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  PRIMARY KEY (user_id, post_id)
-);
-
-ALTER TABLE votes ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Votes are viewable by everyone" ON votes;
-CREATE POLICY "Votes are viewable by everyone" ON votes FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Users can vote in polls" ON votes;
-CREATE POLICY "Users can vote in polls" ON votes FOR INSERT WITH CHECK (auth.uid() = user_id);
-DROP POLICY IF EXISTS "Users can change their poll vote" ON votes;
-CREATE POLICY "Users can change their poll vote" ON votes FOR UPDATE USING (auth.uid() = user_id);
-
--- 16. TABLA DE LIKES (Noticias)
-CREATE TABLE IF NOT EXISTS post_likes (
-  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  PRIMARY KEY (post_id, user_id)
-);
-
-ALTER TABLE post_likes ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Likes are viewable by everyone" ON post_likes;
-CREATE POLICY "Likes are viewable by everyone" ON post_likes FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Users can like posts" ON post_likes;
-CREATE POLICY "Users can like posts" ON post_likes FOR INSERT WITH CHECK (auth.uid() = user_id);
-DROP POLICY IF EXISTS "Users can unlike posts" ON post_likes;
-CREATE POLICY "Users can unlike posts" ON post_likes FOR DELETE USING (auth.uid() = user_id);
-
--- 17. REPORTES
-ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Users can create reports" ON reports;
-CREATE POLICY "Users can create reports" ON reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
-DROP POLICY IF EXISTS "Only admins can view reports" ON reports;
-CREATE POLICY "Only admins can view reports" ON reports FOR SELECT USING (
-  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin', 'teacher'))
-);
-DROP POLICY IF EXISTS "Admins can update report status" ON reports;
-CREATE POLICY "Admins can update report status" ON reports FOR UPDATE USING (
-  auth.uid() IN (SELECT id FROM profiles WHERE role IN ('super_admin', 'admin'))
-);
-
--- 17. POST_READS
-ALTER TABLE post_reads ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Users can insert their own reads" ON post_reads;
-CREATE POLICY "Users can insert their own reads" ON post_reads FOR INSERT WITH CHECK (auth.uid() = user_id);
-DROP POLICY IF EXISTS "Authors can view reads of their posts" ON post_reads;
-CREATE POLICY "Authors can view reads of their posts" ON post_reads FOR SELECT USING (
-  EXISTS (SELECT 1 FROM posts WHERE posts.id = post_id AND posts.author_id = auth.uid()) OR 
-  EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'super_admin')
-);
-
--- 18. TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE (incluye email)
+-- Trigger: Crear perfil al registrarse + Backfill
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -372,36 +371,8 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
--- Backfill: sincronizar emails en perfiles existentes que no lo tienen
-UPDATE public.profiles p
-SET email = au.email
-FROM auth.users au
-WHERE p.id = au.id
-  AND (p.email IS NULL OR p.email = '');
-
--- 19. SISTEMA DE NOTIFICACIONES IN-APP
-CREATE TABLE IF NOT EXISTS notifications (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  actor_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
-  type TEXT NOT NULL,
-  title TEXT NOT NULL,
-  body TEXT,
-  link TEXT,
-  is_read BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Users see their own notifications" ON notifications;
-CREATE POLICY "Users see their own notifications" ON notifications FOR SELECT USING (auth.uid() = user_id);
-DROP POLICY IF EXISTS "System can insert notifications" ON notifications;
-CREATE POLICY "System can insert notifications" ON notifications FOR INSERT WITH CHECK (true);
-DROP POLICY IF EXISTS "Users can mark notifications as read" ON notifications;
-CREATE POLICY "Users can mark notifications as read" ON notifications FOR UPDATE USING (auth.uid() = user_id);
-
--- 20. FUNCIÓN: Actualizar updated_at
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+-- Trigger: Actualizar updated_at
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = NOW();
@@ -409,35 +380,29 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-DROP TRIGGER IF EXISTS update_profiles_updated_at ON profiles;
-CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
-DROP TRIGGER IF EXISTS update_posts_updated_at ON posts;
-CREATE TRIGGER update_posts_updated_at BEFORE UPDATE ON posts FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
+CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+DROP TRIGGER IF EXISTS update_posts_updated_at ON public.posts;
+CREATE TRIGGER update_posts_updated_at BEFORE UPDATE ON public.posts FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
--- 21. TRÍGGERS DE NOTIFICACIÓN
-CREATE OR REPLACE FUNCTION public.notify_group_on_new_post()
+-- Trigger: Notificar nuevo post
+CREATE OR REPLACE FUNCTION public.notify_on_new_post()
 RETURNS TRIGGER AS $$
 DECLARE
-  member RECORD;
-  post_type TEXT;
-  notif_title TEXT;
+  member_id UUID;
+  post_title TEXT := CASE 
+    WHEN NEW.type = 'news' THEN '📰 Nueva noticia'
+    WHEN NEW.type = 'proposal' THEN '💡 Nueva propuesta'
+    ELSE '📊 Nueva encuesta'
+  END;
 BEGIN
   IF NEW.is_published = TRUE THEN
-    IF NEW.type = 'news' THEN
-      notif_title := '📰 Nueva noticia: ' || NEW.title;
-      post_type := 'new_post';
-    ELSIF NEW.type = 'proposal' THEN
-      notif_title := '💡 Nueva propuesta: ' || NEW.title;
-      post_type := 'new_proposal';
-    ELSE
-      notif_title := '📊 Nueva encuesta: ' || NEW.title;
-      post_type := 'new_post';
-    END IF;
-
-    FOR member IN SELECT ug.user_id FROM user_groups ug WHERE ug.group_id = NEW.group_id LOOP
-      IF member.user_id != NEW.author_id THEN
-        INSERT INTO notifications (user_id, actor_id, type, title, body, link)
-        VALUES (member.user_id, NEW.author_id, post_type, notif_title, LEFT(NEW.content, 120), '/dashboard');
+    FOR member_id IN 
+      SELECT ug.user_id FROM public.user_groups ug WHERE ug.group_id = NEW.group_id 
+    LOOP
+      IF member_id != NEW.author_id THEN
+        INSERT INTO public.notifications (user_id, actor_id, type, title, body, link)
+        VALUES (member_id, NEW.author_id, 'new_post', post_title || ': ' || NEW.title, LEFT(NEW.content, 120), '/dashboard');
       END IF;
     END LOOP;
   END IF;
@@ -445,24 +410,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS on_post_published ON posts;
-CREATE TRIGGER on_post_published AFTER INSERT ON posts FOR EACH ROW EXECUTE PROCEDURE public.notify_group_on_new_post();
+DROP TRIGGER IF EXISTS on_post_published ON public.posts;
+CREATE TRIGGER on_post_published AFTER INSERT OR UPDATE OF is_published ON public.posts FOR EACH ROW WHEN (NEW.is_published = TRUE) EXECUTE PROCEDURE public.notify_on_new_post();
 
-CREATE OR REPLACE FUNCTION public.notify_on_status_change()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF OLD.status != NEW.status THEN
-    IF NEW.status = 'approved' THEN
-      INSERT INTO notifications (user_id, type, title, body, link)
-      VALUES (NEW.id, 'approved', '✅ ¡Tu cuenta fue aprobada!', 'Ya puedes ver las noticias y propuestas de tus grupos.', '/dashboard');
-    ELSIF NEW.status = 'rejected' THEN
-      INSERT INTO notifications (user_id, type, title, body, link)
-      VALUES (NEW.id, 'rejected', '❌ Tu solicitud no fue aprobada', 'Contacta a tu docente para más información.', '/');
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- ==========================================
+-- 8. DATOS INICIALES (Seed)
+-- ==========================================
 
-DROP TRIGGER IF EXISTS on_profile_status_changed ON profiles;
-CREATE TRIGGER on_profile_status_changed AFTER UPDATE OF status ON profiles FOR EACH ROW EXECUTE PROCEDURE public.notify_on_status_change();
+INSERT INTO public.groups (name) VALUES 
+('Administración'), ('Docentes'), ('General'), 
+('Grado 1-1'), ('Grado 1-2'), ('Grado 2-1'), ('Grado 3-1')
+ON CONFLICT (name) DO NOTHING;
+
+-- Backfill final de emails (por seguridad)
+UPDATE public.profiles p
+SET email = au.email
+FROM auth.users au
+WHERE p.id = au.id AND (p.email IS NULL OR p.email = '');

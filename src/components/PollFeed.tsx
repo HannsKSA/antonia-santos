@@ -98,6 +98,19 @@ function PollCard({ poll, userProfile, onRefresh }: { poll: any; userProfile: an
 
     const totalVotes = poll.options.reduce((acc: number, opt: any) => acc + (opt.votes_count || 0), 0);
 
+    const handleDelete = async () => {
+        if (!confirm('¿ELIMINAR permanentemente esta encuesta y todos sus votos?')) return;
+        try {
+            const { error } = await supabase.from('posts').delete().eq('id', poll.id);
+            if (error) throw error;
+            onRefresh();
+        } catch (error: any) {
+            alert('Error al eliminar: ' + error.message);
+        }
+    };
+
+    const isSuperAdmin = userProfile?.role === 'super_admin';
+
     return (
         <>
             {pendingOptionId && (
@@ -207,8 +220,27 @@ function PollCard({ poll, userProfile, onRefresh }: { poll: any; userProfile: an
                             Selecciona una opción para votar
                         </span>
                     )}
-                    <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                        Por: <strong>{poll.author?.first_name}</strong>
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <span>Por: <strong>{poll.author?.first_name}</strong></span>
+                        {isSuperAdmin && (
+                            <button
+                                onClick={handleDelete}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '1rem',
+                                    padding: '0.2rem',
+                                    borderRadius: '4px',
+                                    transition: 'background 0.2s',
+                                }}
+                                title="Eliminar encuesta"
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#fee2e2'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                            >
+                                🗑️
+                            </button>
+                        )}
                     </span>
                 </div>
             </article>
