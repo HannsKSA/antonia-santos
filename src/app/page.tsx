@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import CommunityCounter from '@/components/CommunityCounter';
 
 export default function Home() {
   return (
@@ -92,8 +93,8 @@ export default function Home() {
       <section style={{ padding: '5rem 0', background: 'var(--primary)', color: 'white' }}>
         <div className="container" style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center' }}>
           <div>
-            <div style={{ fontSize: '3rem', fontWeight: 700, color: 'var(--accent)' }}>+500</div>
-            <p>Padres Conectados</p>
+            <CommunityCounter />
+            <p>Miembros de nuestra comunidad</p>
           </div>
           <div>
             <div style={{ fontSize: '3rem', fontWeight: 700, color: 'var(--accent)' }}>100%</div>
