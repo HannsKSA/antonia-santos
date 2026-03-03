@@ -156,12 +156,28 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
     };
 
     const toggleGroup = (groupId: string, form: any, setForm: any) => {
-        setForm((prev: any) => ({
-            ...prev,
-            groupIds: prev.groupIds.includes(groupId)
-                ? prev.groupIds.filter((id: string) => id !== groupId)
-                : [...prev.groupIds, groupId],
-        }));
+        setForm((prev: any) => {
+            const isRemoving = prev.groupIds.includes(groupId);
+            if (isRemoving) {
+                return {
+                    ...prev,
+                    groupIds: prev.groupIds.filter((id: string) => id !== groupId),
+                };
+            } else {
+                // Agregar el grupo y todos sus padres recursivamente
+                const idsToAdd = new Set<string>();
+                let currentId: string | null = groupId;
+                while (currentId) {
+                    idsToAdd.add(currentId);
+                    const group = groups.find(g => g.id === currentId);
+                    currentId = group?.parent_id || null;
+                }
+                return {
+                    ...prev,
+                    groupIds: [...new Set([...prev.groupIds, ...Array.from(idsToAdd)])],
+                };
+            }
+        });
     };
 
     const toggleAllGroups = (form: any, setForm: any) => {
