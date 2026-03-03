@@ -351,12 +351,18 @@ CREATE POLICY "Authors can view reads of their posts" ON post_reads FOR SELECT U
   EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'super_admin')
 );
 
--- 18. TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE
+-- 18. TRIGGER PARA CREAR PERFIL AUTOMÁTICAMENTE (incluye email)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, first_name, last_name, status)
-  VALUES (new.id, new.raw_user_meta_data->>'first_name', new.raw_user_meta_data->>'last_name', 'pending');
+  INSERT INTO public.profiles (id, email, first_name, last_name, status)
+  VALUES (
+    new.id,
+    new.email,
+    new.raw_user_meta_data->>'first_name',
+    new.raw_user_meta_data->>'last_name',
+    'pending'
+  );
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -365,6 +371,13 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- Backfill: sincronizar emails en perfiles existentes que no lo tienen
+UPDATE public.profiles p
+SET email = au.email
+FROM auth.users au
+WHERE p.id = au.id
+  AND (p.email IS NULL OR p.email = '');
 
 -- 19. SISTEMA DE NOTIFICACIONES IN-APP
 CREATE TABLE IF NOT EXISTS notifications (

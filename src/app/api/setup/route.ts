@@ -500,7 +500,44 @@ export async function POST() {
     }
   ));
 
-  // ─── PASO 8: Refrescar Cache de Esquema ─────────────────────────────────────
+  // ─── PASO 8: Trigger handle_new_user + backfill de emails ────────────────
+  log.push(await step(
+    'Trigger + Backfill emails',
+    async () => false, // siempre re-aplicar
+    async () => {
+      await execSQL(`
+        -- Actualizar trigger para guardar email en profiles al registrarse
+        CREATE OR REPLACE FUNCTION public.handle_new_user()
+        RETURNS TRIGGER AS $$
+        BEGIN
+          INSERT INTO public.profiles (id, email, first_name, last_name, status)
+          VALUES (
+            new.id,
+            new.email,
+            new.raw_user_meta_data->>'first_name',
+            new.raw_user_meta_data->>'last_name',
+            'pending'
+          );
+          RETURN new;
+        END;
+        $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+        DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+        CREATE TRIGGER on_auth_user_created
+          AFTER INSERT ON auth.users
+          FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+        -- Backfill: copiar email de auth.users a profiles donde esté vacío
+        UPDATE public.profiles p
+        SET email = au.email
+        FROM auth.users au
+        WHERE p.id = au.id
+          AND (p.email IS NULL OR p.email = '');
+      `);
+    }
+  ));
+
+  // ─── PASO 9: Refrescar Cache de Esquema ─────────────────────────────────────
   log.push(await step(
     'Refrescar Cache SQL',
     async () => false,
