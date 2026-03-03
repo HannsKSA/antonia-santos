@@ -249,18 +249,41 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
                                         </td>
                                         <td style={{ padding: '1rem' }}>
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                                {u.groups_info ? (
-                                                    u.groups_info.length > 0
+                                                {(() => {
+                                                    const userGroupIds = u.groups_info
+                                                        ? u.groups_info.map((g: any) => g.group_id)
+                                                        : u.user_groups?.map((ug: any) => ug.group_id) || [];
+
+                                                    const count = userGroupIds.length;
+                                                    if (count === 0) return <span style={{ color: '#ccc', fontSize: '0.75rem' }}>Sin grupo</span>;
+
+                                                    // Si tiene todos los grupos disponibles
+                                                    if (groups.length > 0 && count >= groups.length) {
+                                                        return <span style={{ ...badgeStyle, background: 'var(--primary)', color: 'white' }}>✨ Todos los grupos</span>;
+                                                    }
+
+                                                    // Si tiene muchos, mostrar resumen
+                                                    if (count > 3) {
+                                                        const firstThree = u.groups_info
+                                                            ? u.groups_info.slice(0, 3).map((g: any) => g.name)
+                                                            : u.user_groups.slice(0, 3).map((ug: any) => groups.find((grp: any) => grp.id === ug.group_id)?.name).filter(Boolean);
+
+                                                        return (
+                                                            <>
+                                                                {firstThree.map((name: string) => <span key={name} style={badgeStyle}>{name}</span>)}
+                                                                <span style={{ ...badgeStyle, background: '#f1f5f9', color: '#64748b' }}>+{count - 3} más</span>
+                                                            </>
+                                                        );
+                                                    }
+
+                                                    // Mostrar normal si son pocos
+                                                    return u.groups_info
                                                         ? u.groups_info.map((g: any) => <span key={g.group_id} style={badgeStyle}>{g.name}</span>)
-                                                        : <span style={{ color: '#ccc', fontSize: '0.75rem' }}>Sin grupo</span>
-                                                ) : (
-                                                    u.user_groups?.length > 0
-                                                        ? u.user_groups.map((ug: any) => {
+                                                        : u.user_groups.map((ug: any) => {
                                                             const g = groups.find((grp: any) => grp.id === ug.group_id);
                                                             return g ? <span key={g.id} style={badgeStyle}>{g.name}</span> : null;
-                                                        })
-                                                        : <span style={{ color: '#ccc', fontSize: '0.75rem' }}>Sin grupo</span>
-                                                )}
+                                                        });
+                                                })()}
                                             </div>
                                         </td>
                                         <td style={{ padding: '1rem' }}>
