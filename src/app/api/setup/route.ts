@@ -506,6 +506,9 @@ export async function POST() {
     async () => false, // siempre re-aplicar
     async () => {
       await execSQL(`
+        -- Asegurar que la columna email exista en profiles
+        ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
+
         -- Actualizar trigger para guardar email en profiles al registrarse
         CREATE OR REPLACE FUNCTION public.handle_new_user()
         RETURNS TRIGGER AS $$
