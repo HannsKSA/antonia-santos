@@ -164,6 +164,15 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
         }));
     };
 
+    const toggleAllGroups = (form: any, setForm: any) => {
+        const allIds = groups.map(g => g.id);
+        const isAllSelected = form.groupIds.length === groups.length;
+        setForm((prev: any) => ({
+            ...prev,
+            groupIds: isAllSelected ? [] : allIds,
+        }));
+    };
+
     const filteredUsers = users.filter(u =>
         `${u.first_name} ${u.last_name} ${u.email || ''} ${u.username || ''}`.toLowerCase().includes(search.toLowerCase())
     );
@@ -315,7 +324,12 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
                                     </select>
                                 </div>
                             </div>
-                            <GroupPicker groups={groups} selectedIds={editForm.groupIds} onToggle={(id) => toggleGroup(id, editForm, setEditForm)} />
+                            <GroupPicker
+                                groups={groups}
+                                selectedIds={editForm.groupIds}
+                                onToggle={(id) => toggleGroup(id, editForm, setEditForm)}
+                                onToggleAll={() => toggleAllGroups(editForm, setEditForm)}
+                            />
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
                                 <button type="button" onClick={() => setEditingUser(null)} style={{ ...btnStyle, background: '#cbd5e1', color: '#1e293b' }}>Cancelar</button>
                                 <button type="submit" disabled={updating} style={btnStyle}>{updating ? 'Guardando...' : 'Guardar Cambios'}</button>
@@ -364,7 +378,12 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
                                     </select>
                                 </div>
                             </div>
-                            <GroupPicker groups={groups} selectedIds={createForm.groupIds} onToggle={(id) => toggleGroup(id, createForm, setCreateForm)} />
+                            <GroupPicker
+                                groups={groups}
+                                selectedIds={createForm.groupIds}
+                                onToggle={(id) => toggleGroup(id, createForm, setCreateForm)}
+                                onToggleAll={() => toggleAllGroups(createForm, setCreateForm)}
+                            />
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
                                 <button type="button" onClick={() => setCreating(false)} style={{ ...btnStyle, background: '#cbd5e1', color: '#1e293b' }}>Cancelar</button>
                                 <button type="submit" disabled={saving} style={btnStyle}>{saving ? 'Creando...' : 'Crear Usuario'}</button>
@@ -406,7 +425,14 @@ export default function UsersManager({ userProfile }: { userProfile: any }) {
 }
 
 // ── Selector de grupos reutilizable ─────────────────────────────────────────
-function GroupPicker({ groups, selectedIds, onToggle }: { groups: any[]; selectedIds: string[]; onToggle: (id: string) => void }) {
+function GroupPicker({ groups, selectedIds, onToggle, onToggleAll }: {
+    groups: any[];
+    selectedIds: string[];
+    onToggle: (id: string) => void;
+    onToggleAll: () => void;
+}) {
+    const isAllSelected = groups.length > 0 && selectedIds.length === groups.length;
+
     const buildTree = (nodes: any[], parent: string | null = null): any[] => {
         return nodes
             .filter(node => node.parent_id === parent)
@@ -443,7 +469,15 @@ function GroupPicker({ groups, selectedIds, onToggle }: { groups: any[]; selecte
 
     return (
         <div>
-            <label style={labelStyle}>Asignar Grados / Grupos</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                <label style={labelStyle}>Asignar Grados / Grupos</label>
+                {groups.length > 0 && (
+                    <label style={{ fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'var(--primary)', fontWeight: 600 }}>
+                        <input type="checkbox" checked={isAllSelected} onChange={onToggleAll} />
+                        Seleccionar todos
+                    </label>
+                )}
+            </div>
             <div style={{
                 display: 'flex',
                 flexDirection: 'column',
