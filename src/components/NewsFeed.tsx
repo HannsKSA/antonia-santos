@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getDriveDirectLink } from '@/lib/drive';
 
 type PostAction = 'idle' | 'editing';
 type NewsFilter = 'visible' | 'hidden' | 'all';
@@ -18,24 +19,31 @@ function MediaCarousel({ media }: { media: any[] }) {
             scrollbarWidth: 'thin',
             msOverflowStyle: 'none'
         }}>
-            {media.map((item, idx) => (
-                <div key={idx} style={{ flexShrink: 0, width: '100%', maxWidth: '450px', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-                    {item.type === 'video' ? (
-                        <video
-                            controls
-                            src={item.url}
-                            style={{ width: '100%', height: 'auto', display: 'block' }}
-                        />
-                    ) : (
-                        <img
-                            src={item.url}
-                            alt={`Media ${idx}`}
-                            style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }}
-                            onClick={() => window.open(item.url, '_blank')}
-                        />
-                    )}
-                </div>
-            ))}
+            {media.map((item, idx) => {
+                const displayUrl = getDriveDirectLink(item.url);
+                return (
+                    <div key={idx} style={{ flexShrink: 0, width: '100%', maxWidth: '450px', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                        {item.type === 'video' ? (
+                            <video
+                                controls
+                                src={displayUrl}
+                                style={{ width: '100%', height: 'auto', display: 'block' }}
+                            />
+                        ) : (
+                            <img
+                                src={displayUrl}
+                                alt={`Media ${idx}`}
+                                style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }}
+                                onClick={() => window.open(item.url, '_blank')}
+                                onError={(e) => {
+                                    // If direct link fails, maybe it's a private drive link or invalid
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                            />
+                        )}
+                    </div>
+                );
+            })}
         </div>
     );
 }

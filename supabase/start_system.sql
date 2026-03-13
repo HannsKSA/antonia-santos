@@ -455,7 +455,41 @@ INSERT INTO public.groups (name) VALUES
 ON CONFLICT (name) DO NOTHING;
 
 -- Backfill final de emails (por seguridad)
-UPDATE public.profiles p
-SET email = au.email
-FROM auth.users au
-WHERE p.id = au.id AND (p.email IS NULL OR p.email = '');
+-- ==========================================
+-- 9. ALMACENAMIENTO (Supabase Storage)
+-- ==========================================
+
+-- Crear el bucket si no existe (esto suele hacerse desde el panel, pero aquí dejamos las políticas)
+-- Nota: Para que funcione, el bucket 'community_assets' debe existir en el panel de Storage.
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('community_assets', 'community_assets', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Políticas de Seguridad para el Storage
+-- Permitir que usuarios autenticados con rol de admin/teacher suban archivos
+CREATE POLICY "Admins can upload assets"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'community_assets' AND
+  (SELECT role FROM public.profiles WHERE id = auth.uid()) IN ('super_admin', 'admin', 'teacher')
+);
+
+-- Permitir que todos vean los archivos (Bucket público)
+CREATE POLICY "Public Access to Assets"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'community_assets');
+
+-- Permitir que los autores eliminen sus propios archivos o los admins
+CREATE POLICY "Authors and Admins can delete assets"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (
+  bucket_id = 'community_assets' AND
+  (
+    owner = auth.uid() OR
+    (SELECT role FROM public.profiles WHERE id = auth.uid()) IN ('super_admin', 'admin')
+  )
+);

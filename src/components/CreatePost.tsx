@@ -37,6 +37,43 @@ export default function CreatePost({ userProfile, onPostCreated }: { userProfile
         }
     };
 
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setLoading(true);
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+            const filePath = `posts/${fileName}`;
+
+            const { data, error } = await supabase.storage
+                .from('community_assets')
+                .upload(filePath, file);
+
+            if (error) throw error;
+
+            // Get public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('community_assets')
+                .getPublicUrl(filePath);
+
+            if (publicUrl) {
+                const emptyIdx = mediaLinks.findIndex(l => !l.trim());
+                if (emptyIdx !== -1) {
+                    handleMediaChange(emptyIdx, publicUrl);
+                } else {
+                    setMediaLinks([...mediaLinks, publicUrl]);
+                }
+            }
+        } catch (error: any) {
+            alert('Error al subir: ' + error.message);
+        } finally {
+            setLoading(false);
+            e.target.value = ''; // Reset input
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -140,7 +177,37 @@ export default function CreatePost({ userProfile, onPostCreated }: { userProfile
                 </div>
 
                 <div className="form-group">
-                    <label style={labelStyle}>Multimedia (Imágenes o Videos)</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <label style={{ ...labelStyle, marginBottom: 0 }}>Multimedia (Imágenes o Videos)</label>
+                        <div style={{ position: 'relative' }}>
+                            <button
+                                type="button"
+                                style={{
+                                    background: 'var(--success)',
+                                    color: 'white',
+                                    border: 'none',
+                                    padding: '0.3rem 0.8rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.8rem',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.4rem'
+                                }}
+                                onClick={() => document.getElementById('drive-upload')?.click()}
+                                disabled={loading}
+                            >
+                                📁 {loading ? 'Subiendo...' : 'Subir Archivo'}
+                            </button>
+                            <input
+                                id="drive-upload"
+                                type="file"
+                                accept="image/*,video/*"
+                                style={{ display: 'none' }}
+                                onChange={handleFileUpload}
+                            />
+                        </div>
+                    </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                         {mediaLinks.map((link, idx) => (
                             <div key={idx} style={{ display: 'flex', gap: '0.5rem' }}>
@@ -166,7 +233,7 @@ export default function CreatePost({ userProfile, onPostCreated }: { userProfile
                         onClick={handleAddMedia}
                         style={{ marginTop: '0.5rem', background: 'transparent', border: '1px dashed var(--primary)', color: 'var(--primary)', padding: '0.3rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}
                     >
-                        + Agregar otro link
+                        + Agregar otro link manual
                     </button>
                 </div>
 
